@@ -207,6 +207,9 @@ const CRATES = [
         id: "void",
         name: "Void Crate",
         price: 250,
+        icon: "Obsidian",
+        colour: "#b98cff",
+        headline: "6% enchanted starter tools, 2% epic shards",
         blurb: "The starter gamble. Small shard drops, starter tools with a little enchant.",
         entries: [
             { w: 49, r: "common", s: [60, 140] },
@@ -220,6 +223,9 @@ const CRATES = [
         id: "eclipse",
         name: "Eclipse Crate",
         price: 750,
+        icon: "Moonstone",
+        colour: "#8fd0ff",
+        headline: "6% enchanted diamond tools, 3% epic shards",
         blurb: "Mid tier. Better odds, bigger swings, proper tools.",
         entries: [
             { w: 44, r: "common", s: [200, 350] },
@@ -233,13 +239,16 @@ const CRATES = [
         id: "geo",
         name: "Geo Crate",
         price: 1200,
+        icon: "Geo Chestplate",
+        colour: "#ffd75e",
+        headline: "1% Geo armour, 2% Geo sword tools",
         blurb: "Geo country. Diamond tools and a 1% shot at Geo armour.",
         entries: [
             { w: 60, r: "common", s: [250, 450] },
             { w: 25, r: "uncommon", s: [450, 800] },
             { w: 10, r: "rare", s: [900, 1500] },
             { w: 2, r: "epic", s: [3000, 4200] },
-            { w: 2, r: "rare", pick: TOOL_SETS.starter.concat(["Geo Sword"]), ench: [2, 2] },
+            { w: 2, r: "rare", label: "Geo sword + starter tools", pick: TOOL_SETS.starter.concat(["Geo Sword"]), ench: [2, 2] },
             { w: 1, r: "epic", pick: ARMOUR_SETS.geo, ench: [2, 2], announce: true },
         ],
     },
@@ -247,6 +256,9 @@ const CRATES = [
         id: "serpentite",
         name: "Serpentite Crate",
         price: 1800,
+        icon: "Serpentite Sword",
+        colour: "#55ff55",
+        headline: "1% Serpentite armour, 1% Serpentite tools",
         blurb: "Snake-metal. Serpenite tools, and 1% for a Serpenite piece.",
         entries: [
             { w: 57, r: "common", s: [400, 700] },
@@ -261,6 +273,9 @@ const CRATES = [
         id: "nova",
         name: "Nova Crate",
         price: 2000,
+        icon: "Diamond",
+        colour: "#55ffff",
+        headline: "5% enchant 3 tools, 1% diamond drop",
         blurb: "High roller. Can drop diamonds and heavily enchanted tools.",
         entries: [
             { w: 40, r: "common", s: [600, 1000] },
@@ -275,13 +290,16 @@ const CRATES = [
         id: "astral",
         name: "Astral Crate",
         price: 3600,
+        icon: "Astral Sword",
+        colour: "#b48cff",
+        headline: "1% Astral armour, 2% Astral sword tools",
         blurb: "Star-metal. Astral blades and a 1% Astral armour roll.",
         entries: [
             { w: 54, r: "common", s: [800, 1300] },
             { w: 27, r: "uncommon", s: [1300, 2100] },
             { w: 13, r: "rare", s: [2200, 3600] },
             { w: 3, r: "epic", s: [7000, 10000] },
-            { w: 2, r: "rare", pick: TOOL_SETS.good.concat(["Astral Sword"]), ench: [3, 3] },
+            { w: 2, r: "rare", label: "Astral sword + diamond tools", pick: TOOL_SETS.good.concat(["Astral Sword"]), ench: [3, 3] },
             { w: 1, r: "epic", pick: ARMOUR_SETS.astral, ench: [3, 3], announce: true },
         ],
     },
@@ -289,6 +307,9 @@ const CRATES = [
         id: "mythic",
         name: "Mythic Crate",
         price: 5000,
+        icon: "Moonstone Pickaxe",
+        colour: "#ffcc00",
+        headline: "4% enchant 4 tools, 2% jackpot shards",
         blurb: "Endgame crate. Moonstone, level 4 tools and a jackpot roll.",
         entries: [
             { w: 38, r: "common", s: [1500, 2600] },
@@ -303,13 +324,16 @@ const CRATES = [
         id: "sanguine",
         name: "Sanguine Crate",
         price: 8000,
+        icon: "Sanguine Sword",
+        colour: "#ff5555",
+        headline: "1% Sanguine armour, 1% enchant 4 sword",
         blurb: "Blood-metal. Level 4 tools and a 1% Sanguine armour roll.",
         entries: [
             { w: 53, r: "common", s: [1800, 2800] },
             { w: 27, r: "uncommon", s: [2800, 4500] },
             { w: 14, r: "rare", s: [4500, 7500] },
             { w: 4, r: "epic", s: [16000, 24000] },
-            { w: 1, r: "rare", pick: TOOL_SETS.good.concat(["Sanguine Sword"]), ench: [4, 4] },
+            { w: 1, r: "rare", label: "Sanguine sword + diamond tools", pick: TOOL_SETS.good.concat(["Sanguine Sword"]), ench: [4, 4] },
             { w: 1, r: "void", pick: ARMOUR_SETS.sanguine, ench: [4, 4], announce: true },
         ],
     },
@@ -317,6 +341,9 @@ const CRATES = [
         id: "voidbound",
         name: "Voidbound Crate",
         price: 25000,
+        icon: "Spectral Sword",
+        colour: "#d67bff",
+        headline: "1% Spectral armour, 4% Spectral weapons",
         blurb: "The dealer's best. One in a hundred holds a maxed Spectral piece.",
         entries: [
             { w: 34, r: "common", s: [9000, 13000] },
@@ -689,6 +716,7 @@ const NAMED_COLOURS = {
     "#ff5555": "red", "#ff6666": "red", "#ff9a9a": "salmon",
     "#55ff55": "lime", "#55ffff": "aqua", "#55aaff": "dodgerblue",
     "#8fd0ff": "skyblue", "#b48cff": "violet", "#ffff55": "yellow",
+    "#b98cff": "violet", "#d67bff": "violet", "#c9a7ff": "violet",
     "#ffaa55": "orange", "#8a8a8a": "gray", "#aaaaaa": "darkgray",
     "#b0b0b0": "silver", "#e0e0e0": "gainsboro", "#ffffff": "white",
     "#dddddd": "gainsboro", "#d9d9d9": "silver", "#c9c9c9": "silver",
@@ -1707,7 +1735,39 @@ function cmdCrates(playerId) {
             "  " + (i + 1) + ". " + c.name + " - " + fmtNum(c.price) + " shards" +
             (affordable ? "  [affordable]" : "  (need " + fmtNum(c.price - d.shards) + " more)"),
             affordable ? "#55ff55" : "#ffffff");
-        say(playerId, "     " + c.blurb + "  (/crate buy " + c.id + ")", "#8a8a8a");
+        say(playerId, "     " + c.headline, c.colour);
+        say(playerId, "     " + c.blurb + "  (/crate info " + c.id + ")", "#8a8a8a");
+    }
+}
+
+function cmdCrateInfo(playerId, want) {
+    const crate = crateById(want);
+
+    if (!crate) {
+        say(playerId, "Usage: /crate info <crate>  -  /crates lists all nine.", "#ff5555");
+        return;
+    }
+
+    const d = ensure(playerId);
+
+    say(playerId, crate.name.toUpperCase() + "  -  " + fmtNum(crate.price) + " " + CFG.CURRENCY_NAME, crate.colour);
+    say(playerId, crate.blurb, "#8a8a8a");
+    say(playerId, crate.headline, crate.colour);
+
+    const rows = crateOdds(crate);
+    for (let i = 0; i < rows.length; i++) {
+        const entry = rows[i].entry;
+        say(playerId, crateOddsText(crate)[i], RARITY_COLOUR[rows[i].r] || "#ffffff");
+
+        if (entry.pick && entry.pick.length > 1) {
+            say(playerId, "          " + entry.pick.join(", "), "#8a8a8a");
+        }
+    }
+
+    say(playerId, "Buy: /crate buy " + crate.id + "  -  or right-click the dealer.", "#8a8a8a");
+
+    if (d.shards < crate.price) {
+        say(playerId, "You need " + fmtNum(crate.price - d.shards) + " more " + CFG.CURRENCY_NAME + ".", "#ffaa55");
     }
 }
 
@@ -4413,6 +4473,13 @@ playerCommand = function (playerId, command) {
     }
 
     if (cmd === "crate" || cmd === "buycrate" || cmd === "buy") {
+        const sub = (args[1] || "").toLowerCase();
+
+        if (sub === "info" || sub === "odds" || sub === "chance" || sub === "chances") {
+            cmdCrateInfo(playerId, args[2]);
+            return false;
+        }
+
         // /buy <crate> is accepted as a shortcut for /crate buy <crate>.
         if (cmd === "buy") {
             cmdBuyCrate(playerId, ["crate", "buy", args[1]]);
@@ -4559,7 +4626,7 @@ const CRATE_DEALER = {
 const CRATE_SHOP = {
     key: "vb_crates",
     title: "Crates",
-    blurb: "Buy a crate and open it on the spot.",
+    blurb: "Nine crates, full odds on every tile. Right-click to roll.",
     sort: 70,
 };
 
@@ -4634,16 +4701,122 @@ function dealerNear(playerId) {
     return Math.sqrt(dx * dx + dz * dz) <= CRATE_DEALER.range;
 }
 
+// What each roll pool is called on the odds board. Pools are matched by
+// identity against the crate tables, so renaming an item can never leave a
+// tile describing loot the crate no longer hands out.
+const POOL_LABELS = [
+    { pool: ARMOUR_SETS.geo, label: "Geo armour piece" },
+    { pool: ARMOUR_SETS.serpentite, label: "Serpentite armour piece" },
+    { pool: ARMOUR_SETS.astral, label: "Astral armour piece" },
+    { pool: ARMOUR_SETS.sanguine, label: "Sanguine armour piece" },
+    { pool: ARMOUR_SETS.spectral, label: "Spectral armour piece" },
+    { pool: TOOL_SETS.starter, label: "starter tools" },
+    { pool: TOOL_SETS.good, label: "diamond / moonstone tools" },
+    { pool: TOOL_SETS.serpentite, label: "Serpentite tools" },
+    { pool: TOOL_SETS.spectral, label: "Spectral weapon" },
+];
+
+function poolLabel(pool) {
+    for (let i = 0; i < POOL_LABELS.length; i++) {
+        if (POOL_LABELS[i].pool === pool) return POOL_LABELS[i].label;
+    }
+    return "tools";
+}
+
+function crateTotal(crate) {
+    let total = 0;
+    for (let i = 0; i < crate.entries.length; i++) total += crate.entries[i].w;
+    return total || 1;
+}
+
+// Weights are written out of 100, but the maths is against the real total so
+// a crate that gains a row can never silently start showing wrong odds.
+function crateChance(crate, entry) {
+    return Math.round(entry.w / crateTotal(crate) * 1000) / 10;
+}
+
+function pctText(pct) {
+    if (pct === Math.floor(pct)) return String(pct) + "%";
+    return pct.toFixed(1) + "%";
+}
+
+function enchantText(ench) {
+    if (!ench) return "";
+    if (ench[0] === ench[1]) return "  enchant " + ench[0];
+    return "  enchant " + ench[0] + "-" + ench[1];
+}
+
+function crateRowText(entry) {
+    if (entry.pick) return (entry.label || poolLabel(entry.pick)) + enchantText(entry.ench);
+
+    if (entry.i) {
+        const range = entry.ia ? " x" + entry.ia[0] + "-" + entry.ia[1] : "";
+        return entry.i + range + enchantText(entry.ench);
+    }
+
+    const lo = entry.s[0];
+    const hi = entry.s[1];
+    return (lo === hi ? fmtNum(lo) : fmtNum(lo) + "-" + fmtNum(hi)) + " " + CFG.CURRENCY_NAME;
+}
+
+// Every row of a crate, with its chance, in table order (biggest first).
+function crateOdds(crate) {
+    const rows = [];
+
+    for (let i = 0; i < crate.entries.length; i++) {
+        const entry = crate.entries[i];
+        rows.push({
+            entry: entry,
+            r: entry.r,
+            pct: crateChance(crate, entry),
+            text: crateRowText(entry),
+        });
+    }
+
+    return rows;
+}
+
+function crateOddsText(crate) {
+    const rows = crateOdds(crate);
+    const out = [];
+
+    for (let i = 0; i < rows.length; i++) {
+        out.push("  " + pctText(rows[i].pct) + "  " + rows[i].text);
+    }
+
+    return out;
+}
+
+// A shop tile is the crate's whole pitch: its own sprite, its headline and a
+// line for every single outcome, coloured by rarity.
+function crateTileDescription(crate) {
+    const parts = [];
+
+    parts.push({ str: fmtNum(crate.price) + " " + CFG.CURRENCY_NAME, style: styleFor("#ffff55") });
+    parts.push({ str: "  " + crate.headline, style: styleFor(crate.colour) });
+
+    const rows = crateOdds(crate);
+    for (let i = 0; i < rows.length; i++) {
+        const colour = RARITY_COLOUR[rows[i].r] || "#ffffff";
+        parts.push({ str: "\n" + pctText(rows[i].pct) + "  " + rows[i].text, style: styleFor(colour) });
+    }
+
+    return parts;
+}
+
 function crateShopTile(crate) {
+    const colour = colourName(crate.colour);
+
     return {
-        image: "Moonstone",
+        image: crate.icon,
+        imageColour: colour,
         cost: 0,
         currency: CFG.CURRENCY_ID,
         canBuy: true,
         hidden: false,
-        buyButtonText: "Buy",
-        customTitle: crate.name,
-        description: fmtNum(crate.price) + " " + CFG.CURRENCY_NAME + " - " + crate.blurb,
+        buyButtonText: { str: "Open", style: { color: colour, colour: colour } },
+        customTitle: [{ icon: crate.icon }, { str: " " + crate.name, style: styleFor(crate.colour) }],
+        description: crateTileDescription(crate),
         sortPriority: 100 - crate.price / 1000,
     };
 }
