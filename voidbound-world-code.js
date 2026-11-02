@@ -1950,9 +1950,9 @@ function cmdTpPos(playerId, args) {
 }
 
 // ----- purple portal rtp -----
-// A purple (or magenta) portal block is a doorway back to the surface: walk
-// into one and you land on a random patch of open ground. Nothing is placed
-// in the world, so it works on any portal built from these blocks.
+// Any portal block is a doorway to the surface: walk into one and you land on
+// a random patch of open ground. Nothing is placed in the world, so it works
+// on any portal the build already has.
 
 function blockNameAt(x, y, z) {
     try {
@@ -1963,52 +1963,78 @@ function blockNameAt(x, y, z) {
 }
 
 function isPortalBlock(name) {
-    const lower = String(name || "").toLowerCase();
-
-    return lower.indexOf("portal") !== -1 && (lower.indexOf("purple") !== -1 || lower.indexOf("magenta") !== -1);
+    return String(name || "").toLowerCase().indexOf("portal") !== -1;
 }
 
-// A portal is usually two blocks tall, so the legs, waist and head are all
-// checked rather than just the block under the feet.
+// Every block the player could be standing in: their own column first, then
+// the four they might be pressed against, since a doorway is often one block
+// wide and a player's centre rounds to the frame.
+function findPortalAround(pos) {
+    for (let dy = -1; dy <= 2.5; dy += 0.5) {
+        const name = blockNameAt(pos[0], pos[1] + dy, pos[2]);
+        if (isPortalBlock(name)) return name;
+    }
+
+    const bx = Math.floor(pos[0]);
+    const bz = Math.floor(pos[2]);
+    const around = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+    for (let i = 0; i < around.length; i++) {
+        for (let dy = 0; dy <= 1.5; dy += 0.75) {
+            const name = blockNameAt(bx + around[i][0] + 0.5, pos[1] + dy, bz + around[i][1] + 0.5);
+            if (isPortalBlock(name)) return name;
+        }
+    }
+
+    return null;
+}
+
 function portalAtPlayer(playerId) {
     let pos;
 
     try { pos = api.getPosition(playerId); } catch (e) { return null; }
     if (!pos || !isFinite(pos[0]) || !isFinite(pos[1]) || !isFinite(pos[2])) return null;
 
-    for (let dy = 0; dy <= 1.7; dy += 0.85) {
-        const name = blockNameAt(pos[0], pos[1] + dy, pos[2]);
-        if (isPortalBlock(name)) return name;
-    }
+    const rt = RT[playerId] || (RT[playerId] = {});
+    const cell = Math.floor(pos[0]) + "," + Math.floor(pos[1]) + "," + Math.floor(pos[2]);
 
-    return null;
+    // Standing still in the same block cannot start a portal trip, so the
+    // reads are only repeated once the player actually moves.
+    if (rt.portalCell === cell && !rt.portalSeen) return null;
+
+    rt.portalCell = cell;
+
+    const hit = findPortalAround(pos);
+    rt.portalSeen = !!hit;
+
+    return hit;
 }
 
-function blockIsSolid(x, y, z) {
+function blockSolidAt(x, y, z) {
     try {
-        return api.getBlockSolidity(Math.floor(x), Math.floor(y), Math.floor(z)) === true;
-    } catch (e) {
-        // Unreadable ground is treated as solid, so the scan keeps descending
-        // instead of teleporting someone into the sky.
-        return true;
-    }
+        const solid = api.getBlockSolidity(Math.floor(x), Math.floor(y), Math.floor(z));
+        if (typeof solid === "boolean") return solid;
+    } catch (e) { }
+
+    // No solidity API: fall back to the block name, which is enough to tell
+    // ground from open air.
+    const name = blockNameAt(x, y, z).toLowerCase();
+
+    return name !== "" && name !== "air";
 }
 
-// Highest ground with two clear blocks above it, or null if there is none.
 function findSurface(x, z) {
     let y = CFG.RTP_TOP_Y;
 
-    // Coarse pass, then refine, so a scan costs a few dozen reads instead of
-    // one per block of world height.
-    while (y > CFG.RTP_MIN_Y && !blockIsSolid(x, y, z)) y -= 4;
+    while (y > CFG.RTP_MIN_Y && !blockSolidAt(x, y, z)) y -= 4;
     if (y <= CFG.RTP_MIN_Y) return null;
 
     // The coarse step may have landed up to three blocks low, so climb while
     // the block above is still solid.
-    while (y < CFG.RTP_TOP_Y && blockIsSolid(x, y + 1, z)) y += 1;
+    while (y < CFG.RTP_TOP_Y && blockSolidAt(x, y + 1, z)) y += 1;
 
     for (let tries = 0; tries < 6; tries++) {
-        if (!blockIsSolid(x, y + 1, z) && !blockIsSolid(x, y + 2, z)) return y + 1;
+        if (!blockSolidAt(x, y + 1, z) && !blockSolidAt(x, y + 2, z)) return y + 1;
         y -= 1;
     }
 
@@ -2048,6 +2074,8 @@ function rtpPlayer(playerId, now) {
     // Stops a portal at the landing spot from firing straight away.
     const rt = RT[playerId] || (RT[playerId] = {});
     rt.portalUntil = (now || Date.now()) + CFG.PORTAL_COOLDOWN_MS;
+    rt.portalCell = null;
+    rt.portalSeen = false;
 
     say(playerId, "The void spits you out at " + spot[0] + ", " + spot[1] + ", " + spot[2] + ".", "#b98cff");
     return true;
@@ -2070,6 +2098,38 @@ function checkPortals(dt, now) {
 
         rtpPlayer(id, stamp);
     }
+}
+
+// Prints exactly what the server reads around a player, so a portal that does
+// nothing can be diagnosed without guessing.
+function cmdPortal(playerId) {
+    let pos = null;
+
+    try { pos = api.getPosition(playerId); } catch (e) { }
+
+    if (!pos) {
+        say(playerId, "The server cannot read your position.", "#ff5555");
+        return;
+    }
+
+    say(playerId, "PORTAL CHECK", "#b98cff");
+    say(playerId, "  you: " + Math.round(pos[0]) + ", " + Math.round(pos[1]) + ", " + Math.round(pos[2]), "#8a8a8a");
+
+    for (let dy = 0; dy <= 2; dy += 1) {
+        const name = blockNameAt(pos[0], pos[1] + dy, pos[2]);
+        const hit = isPortalBlock(name);
+
+        say(playerId, "  y+" + dy + ": " + (name || "(empty)") + (hit ? "  <- portal" : ""), hit ? "#55ff55" : "#8a8a8a");
+    }
+
+    const near = findPortalAround(pos);
+    const surface = findSurface(pos[0], pos[2]);
+    const rt = RT[playerId] || {};
+
+    say(playerId, "  nearby portal: " + (near || "none"), near ? "#55ff55" : "#8a8a8a");
+    say(playerId, "  ground here: " + (surface === null ? "none found" : surface), "#8a8a8a");
+    say(playerId, "  apis: getBlock " + (typeof api.getBlock) + ", solidity " + (typeof api.getBlockSolidity), "#8a8a8a");
+    say(playerId, "  cooldown: " + (rt.portalUntil && rt.portalUntil > Date.now() ? Math.ceil((rt.portalUntil - Date.now()) / 1000) + "s" : "ready"), "#8a8a8a");
 }
 
 // ----- items -----
@@ -4016,6 +4076,11 @@ playerCommand = function (playerId, command) {
 
     if (cmd === "giverskin" || cmd === "skin") {
         cmdGiverSkin(playerId, args);
+        return false;
+    }
+
+    if (cmd === "portal" || cmd === "portals") {
+        cmdPortal(playerId);
         return false;
     }
 
