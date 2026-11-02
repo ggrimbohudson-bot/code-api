@@ -1520,28 +1520,15 @@ function cmdBoardRefresh(playerId) {
     say(playerId, "Leaderboard refreshed for " + count + " player" + (count === 1 ? "" : "s") + ". Press G.", "#55ff55");
 }
 
-// ---------------- HOMES AND THE UTILITIES MENU ----------------
-// Five home slots per player. Slot 1 is free, slots 2-5 unlock one at a
-// time for 1,000 Void Shards. /sethome stores where you stand, /home takes
-// you back, and every slot is also a tile in the B menu's Utilities tab.
+// ---------------- HOMES ----------------
+// Five home slots per player, all driven by commands: /homes lists them,
+// /sethome stores a spot, /home takes you back, /renamehome names one and
+// /delhome clears one. There is no menu to open.
 
 const HOME_SLOTS = 5;
 const HOME_COST = 1000;
 const LOBBY_SPAWN = [10000, -9999, 10000];
-
-const HOMES_SHOP = { key: "vb_homes", title: "Homes", sort: 96 };
 const HOME_NAME_MAX = 20;
-
-// Shop tiles take item names, not icon names, so these are real Bloxd items.
-const HOME_IMAGE = {
-    set: "Gold Clock",
-    empty: "Wood Clock",
-    locked: "Diamond",
-    delete: "Lava Bucket",
-    lobby: "Compass",
-};
-
-let homesShopReady = false;
 
 // Old saves have no homes at all, so the array is rebuilt rather than
 // trusted: a broken slot must never cost a player a teleport.
@@ -1674,7 +1661,7 @@ function unlockHome(playerId, raw) {
     return true;
 }
 
-function cmdHomes(playerId, openMenu) {
+function cmdHomes(playerId) {
     const d = ensureHomes(ensure(playerId));
 
     say(playerId, "== HOMES ==", "#ffcc00");
@@ -1689,10 +1676,8 @@ function cmdHomes(playerId, openMenu) {
         else say(playerId, "  " + n + ": " + homeLabel(d, i) + " - " + Math.round(home.x) + ", " + Math.round(home.y) + ", " + Math.round(home.z), "#55ff55");
     }
 
-    say(playerId, "/home <n> teleports, /sethome <n> moves one. Name or delete them in the B menu's Homes tab.", "#5a5a5a");
-
-    // Opening from chat means the tab is reachable even with no button.
-    if (openMenu !== false) openHomesMenu(playerId);
+    say(playerId, "/home <n> teleports, /sethome <n> moves one.", "#5a5a5a");
+    say(playerId, "/renamehome <n> <name> names one, /delhome <n> clears one without losing the slot.", "#5a5a5a");
 }
 
 function cmdLobby(playerId) {
@@ -1772,163 +1757,12 @@ function deleteHome(playerId, raw) {
 // A slot tile reads its own state: locked ones sell the slot, empty ones take
 // the spot you are standing on, set ones teleport. Any typing in the box is a
 // name, and a name on a set home renames it without moving you.
-function homeSlotTile(d, index) {
-    const n = index + 1;
-    const locked = n > d.homeSlots;
-    const home = d.homes[index];
 
-    const title = locked ? "Home " + n + " - locked" : homeLabel(d, index);
-    const lines = [];
 
-    if (locked) {
-        lines.push({ str: "Unlock for " + fmtNum(HOME_COST) + " " + CFG.CURRENCY_NAME, style: styleFor("#ffd75e") });
-    } else if (!home) {
-        lines.push({ str: "Empty - press to set it here", style: styleFor("#8fd0ff") });
-    } else {
-        lines.push({ str: Math.round(home.x) + ", " + Math.round(home.y) + ", " + Math.round(home.z), style: styleFor("#8fd0ff") });
-    }
 
-    lines.push({ str: "\nType a name in the box to name it.", style: styleFor("#5a5a5a") });
 
-    const item = shopTile(locked ? HOME_IMAGE.locked : home ? HOME_IMAGE.set : HOME_IMAGE.empty, title, lines, false, 100 - n);
 
-    item.imageColour = colourName(locked ? "#8a8a8a" : home ? "#55ff55" : "#8fd0ff");
-    item.buyButtonText = {
-        str: locked ? "Buy " + fmtNum(HOME_COST) : home ? "Teleport" : "Set here",
-        style: styleFor(locked ? "#ffd75e" : home ? "#55ff55" : "#8fd0ff"),
-    };
-    item.userInput = { type: "text", placeholderText: "Home name" };
 
-    return item;
-}
-
-function homeDeleteTile() {
-    const item = shopTile(HOME_IMAGE.delete, "Delete a home", [
-        { str: "Type the home number in the box, then press Delete.", style: styleFor("#ff8888") },
-        { str: "\nThe slot stays unlocked, the spot is cleared.", style: styleFor("#5a5a5a") },
-    ], false, 90);
-
-    item.imageColour = colourName("#ff5555");
-    item.buyButtonText = { str: "Delete", style: styleFor("#ff5555") };
-    item.userInput = { type: "number", placeholderText: "Home number" };
-
-    return item;
-}
-
-function homeLobbyTile() {
-    const item = shopTile(HOME_IMAGE.lobby, "Lobby Spawn", [
-        { str: "Back to the lobby", style: styleFor("#8fd0ff") },
-        { str: "\n" + LOBBY_SPAWN[0] + ", " + LOBBY_SPAWN[1] + ", " + LOBBY_SPAWN[2], style: styleFor("#5a5a5a") },
-    ], false, 95);
-
-    item.imageColour = colourName("#ffcc00");
-    item.buyButtonText = { str: "Teleport", style: styleFor("#ffcc00") };
-
-    return item;
-}
-
-function renderHomesMenu(playerId) {
-    const d = ensureHomes(ensure(playerId));
-
-    for (let i = 0; i < HOME_SLOTS; i++) {
-        putShopItem(playerId, HOMES_SHOP.key, "vb_home_" + (i + 1), homeSlotTile(d, i));
-    }
-
-    putShopItem(playerId, HOMES_SHOP.key, "vb_home_delete", homeDeleteTile());
-    putShopItem(playerId, HOMES_SHOP.key, "vb_home_lobby", homeLobbyTile());
-}
-
-function setupHomesShop() {
-    try {
-        api.configureShopCategory(HOMES_SHOP.key, {
-            customTitle: HOMES_SHOP.title,
-            description: "Your homes, their names, and the lobby spawn.",
-            sortPriority: HOMES_SHOP.sort,
-        });
-    } catch (e) {
-        noteError("homes category", e);
-    }
-
-    if (homesShopReady) return;
-    homesShopReady = true;
-
-    // These copies are visible on purpose. Bloxd does not list a category that
-    // has nothing to show, and the per-player tiles are only added once a
-    // player is in the world, so hidden base tiles left the tab invisible.
-    const blank = { homes: [], homeSlots: 1 };
-    for (let i = 0; i < HOME_SLOTS; i++) blank.homes.push(null);
-
-    for (let i = 0; i < HOME_SLOTS; i++) {
-        try {
-            api.createShopItem(HOMES_SHOP.key, "vb_home_" + (i + 1), homeSlotTile(blank, i));
-        } catch (e) {
-            noteError("homes base slot", e);
-        }
-    }
-
-    try {
-        api.createShopItem(HOMES_SHOP.key, "vb_home_delete", homeDeleteTile());
-    } catch (e) {
-        noteError("homes base delete", e);
-    }
-
-    try {
-        api.createShopItem(HOMES_SHOP.key, "vb_home_lobby", homeLobbyTile());
-    } catch (e) {
-        noteError("homes base lobby", e);
-    }
-}
-
-function openHomesMenu(playerId) {
-    setupHomesShop();
-    renderHomesMenu(playerId);
-
-    try {
-        api.openShop(playerId, false, HOMES_SHOP.key, false);
-    } catch (e) {
-        noteError("homes menu open", e);
-        say(playerId, "The homes menu would not open - the list is below.", "#ff5555");
-        cmdHomes(playerId, false);
-    }
-}
-
-function handleHomesBuy(playerId, itemKey, userInput) {
-    const d = ensureHomes(ensure(playerId));
-    const typed = cleanHomeName(userInput);
-
-    if (itemKey === "vb_home_lobby") {
-        cmdLobby(playerId);
-        return;
-    }
-
-    if (itemKey === "vb_home_delete") {
-        deleteHome(playerId, userInput);
-        renderHomesMenu(playerId);
-        return;
-    }
-
-    const slot = homeSlotArg(String(itemKey).replace("vb_home_", ""));
-
-    if (!slot) return;
-
-    if (slot > d.homeSlots) {
-        unlockHome(playerId, slot);
-        renderHomesMenu(playerId);
-        return;
-    }
-
-    const home = d.homes[slot - 1];
-
-    if (!home) {
-        if (setHome(playerId, slot) && typed) renameHome(playerId, slot, typed);
-    } else if (typed) {
-        renameHome(playerId, slot, typed);
-    } else {
-        useHome(playerId, slot);
-    }
-
-    renderHomesMenu(playerId);
-}
 
 // ---------------- COMMANDS ----------------
 
@@ -1941,12 +1775,13 @@ function cmdHelp(playerId) {
     say(playerId, "  /pay <player> <amount> - send shards", "#ffffff");
     say(playerId, "  /crates - crate list", "#ffffff");
     say(playerId, "  /crate buy <id> - buy and open a crate", "#ffffff");
-    say(playerId, "  /dealer - open the crate dealer's shop", "#ffffff");
-    say(playerId, "UTILITIES", "#55aaff");
-    say(playerId, "  /util - the utilities menu (homes, lobby spawn)", "#ffffff");
+    say(playerId, "  /crate info <id> - every payout and its chance", "#ffffff");
+    say(playerId, "HOMES", "#55aaff");
     say(playerId, "  /home [1-" + HOME_SLOTS + "] - teleport home", "#ffffff");
     say(playerId, "  /sethome [1-" + HOME_SLOTS + "] - set a home here", "#ffffff");
     say(playerId, "  /homes - your slots, what is unlocked and set", "#ffffff");
+    say(playerId, "  /renamehome <n> <name> - name a home", "#ffffff");
+    say(playerId, "  /delhome <n> - clear a home, keep the slot", "#ffffff");
     say(playerId, "  /spawn - back to the lobby", "#ffffff");
     say(playerId, "QUESTS", "#55aaff");
     say(playerId, "  /quests - your quests and XP", "#ffffff");
@@ -2208,14 +2043,7 @@ function cmdBuyCrate(playerId, args) {
         return;
     }
 
-    const d = ensure(playerId);
-    if (d.shards < crate.price) {
-        say(playerId, "Need " + fmtNum(crate.price - d.shards) + " more " + CFG.CURRENCY_NAME + " for a " + crate.name + ".", "#ff5555");
-        return;
-    }
-
-    takeShards(playerId, crate.price);
-    openCrate(playerId, crate);
+    buyCrate(playerId, crate);
 }
 
 function cmdEvents(playerId, args) {
@@ -2433,12 +2261,10 @@ function targetOrComplain(playerId, name) {
     return target;
 }
 
-// The one button every player gets in the B menu. Everything else about
-// homes lives in the tab it opens, so only one key is ever taken.
+// Only staff get buttons now: homes and crates are commands, so a normal
+// player is handed no custom buttons at all.
 function menuButtonsFor(playerId) {
-    const buttons = [
-        { id: "vb_homes", icon: "house", keycode: "KeyH", description: "Homes - name, delete, teleport" },
-    ];
+    const buttons = [];
 
     if (rankLevel(playerId) < 1) return buttons;
 
@@ -4613,15 +4439,6 @@ onPlayerJoin = function (playerId) {
     // every player has whatever their rank.
     renderStaffMenu(playerId);
 
-    // The Homes tab is filled in on join, not just when the shortcut is
-    // pressed, so it still works for a client that never shows the button.
-    try {
-        setupHomesShop();
-        renderHomesMenu(playerId);
-    } catch (e) {
-        noteError("homes menu", e);
-    }
-
     syncClientButtons(playerId);
 
     const mute = STAFF.mutes[key];
@@ -4682,11 +4499,6 @@ onPlayerChat = function (playerId, chatMessage, channelName) {
 };
 
 onPlayerPressedButton = function (playerId, buttonId) {
-    if (buttonId === "vb_homes") {
-        openHomesMenu(playerId);
-        return;
-    }
-
     if (buttonId === "vb_panel") {
         ensure(playerId);
         openStaffMenu(playerId, SHOP_CATS.staff.key);
@@ -4702,19 +4514,7 @@ onPlayerPressedButton = function (playerId, buttonId) {
 // Every staff tile is a zero cost shop item, so buying one is the same
 // as clicking it.
 onPlayerBoughtShopItem = function (playerId, categoryKey, itemKey, item, userInput) {
-    if (String(categoryKey) === HOMES_SHOP.key) {
-        handleHomesBuy(playerId, itemKey, userInput);
-        return;
-    }
-
     if (!categoryKey) return;
-
-    if (String(categoryKey) === CRATE_SHOP.key) {
-        const crate = crateByShopKey(itemKey);
-        if (crate) buyCrateFromShop(playerId, crate);
-        return;
-    }
-
     if (String(categoryKey).indexOf("vb_") !== 0) return;
 
     handleStaffMenuBuy(playerId, categoryKey, itemKey, userInput);
@@ -4769,13 +4569,6 @@ onPlayerChangeBlock = function (playerId, x, y, z, fromBlock, toBlock) {
 onPlayerAltAction = function (playerId, x, y, z, block, targetEId) {
     if (!playerId) return;
 
-    // The dealer is a mesh, so the client can hand him to us by id. That
-    // check runs first: a click on him must never be read as a giver talk.
-    if (targetEId && crateDealerEId && targetEId === crateDealerEId) {
-        openCrateDealer(playerId);
-        return;
-    }
-
     if (targetEId) {
         for (const key in QUEST_NPCS) {
             if (QUEST_NPCS[key] === targetEId) {
@@ -4783,11 +4576,6 @@ onPlayerAltAction = function (playerId, x, y, z, block, targetEId) {
                 return;
             }
         }
-    }
-
-    if (dealerNear(playerId, x, z)) {
-        openCrateDealer(playerId);
-        return;
     }
 
     const near = giverNear(playerId);
@@ -4861,7 +4649,7 @@ function perSecond(dt) {
 // ---------------- COMMAND ROUTER ----------------
 
 // Shown by /version and /help, so it is obvious which paste is live.
-const BUILD = "VB-HOMES-3";
+const BUILD = "VB-CMD-4";
 
 playerCommand = function (playerId, command) {
     ensure(playerId);
@@ -4919,11 +4707,6 @@ playerCommand = function (playerId, command) {
         return false;
     }
 
-    if (cmd === "dealer" || cmd === "crateshop") {
-        openCrateDealer(playerId);
-        return false;
-    }
-
     if (cmd === "givertag" || cmd === "tags") {
         for (const key in QUEST_TYPES) applyGiverNameTag(key);
         say(playerId, "Giver name tags refreshed.", "#55ff55");
@@ -4948,6 +4731,21 @@ playerCommand = function (playerId, command) {
 
     if (cmd === "unlockhome" || cmd === "buyhome") {
         unlockHome(playerId, args[1] === undefined ? 0 : args[1]);
+        return false;
+    }
+
+    if (cmd === "delhome" || cmd === "deletehome" || cmd === "removehome") {
+        deleteHome(playerId, args[1] === undefined ? 0 : args[1]);
+        return false;
+    }
+
+    if (cmd === "renamehome" || cmd === "namehome") {
+        if (args[1] === undefined || args.length < 3) {
+            say(playerId, "Usage: /renamehome <n> <name>", "#ff5555");
+            return false;
+        }
+
+        renameHome(playerId, parseInt(args[1], 10) || 0, args.slice(2).join(" "));
         return false;
     }
 
@@ -5139,103 +4937,6 @@ playerCommand = function (playerId, command) {
 // His shop is charged in Void Shards through the same takeShards path as
 // /crate buy, so a crate costs the same however it is bought.
 
-const CRATE_DEALER = {
-    name: "Crate Dealer",
-    x: 50013.5,
-    y: 60001,
-    z: 49999.5,
-    range: 6,
-    skin: "piggy_banker",
-    size: 1.12,
-};
-
-const CRATE_SHOP = {
-    key: "vb_crates",
-    title: "Crates",
-    blurb: "Nine crates, full odds on every tile. Right-click the dealer at 50013, 60001, 49999.",
-    sort: 70,
-};
-
-let crateDealerEId = null;
-let crateShopReady = false;
-
-function dealerNameTag() {
-    return {
-        content: [{ str: "\u2726 CRATE DEALER \u2726", style: styleFor("#b98cff") }],
-        subtitle: [{ str: "RIGHT-CLICK TO BUY CRATES", style: styleFor("#8a8a8a") }],
-        border: { colour: colourName("#b98cff"), style: "glow" },
-    };
-}
-
-function applyDealerNameTag() {
-    if (!crateDealerEId) return;
-
-    try {
-        api.setTargetedPlayerSettingForEveryone(crateDealerEId, "nameTagInfo", dealerNameTag(), true);
-        return;
-    } catch (e) {
-        noteError("dealer nametag", e);
-    }
-
-    try {
-        api.setTargetedPlayerSettingForEveryone(crateDealerEId, "nameColour", "purple", true);
-    } catch (e) {
-        noteError("dealer name colour", e);
-    }
-}
-
-function setupCrateDealer() {
-    if (crateDealerEId) {
-        applyDealerNameTag();
-        return;
-    }
-
-    let eId = null;
-
-    try {
-        eId = api.attemptCreateMeshEntity("Person", {
-            size: CRATE_DEALER.size,
-            pose: "standing",
-            textures: { head: CRATE_DEALER.skin },
-        }, CRATE_DEALER.name + " - right-click me");
-    } catch (e) {
-        noteError("crate dealer", e);
-        eId = null;
-    }
-
-    if (!eId) return;
-
-    crateDealerEId = eId;
-
-    try {
-        api.setPosition(eId, CRATE_DEALER.x, CRATE_DEALER.y, CRATE_DEALER.z);
-    } catch (e) {
-        noteError("dealer position", e);
-    }
-
-    applyDealerNameTag();
-}
-
-// Standing next to the dealer counts as talking to him. If the engine
-// refuses to hand back the player's position mid-callback, the block the
-// click reported is used instead, so a right-click on him still lands.
-function dealerNear(playerId, clickedX, clickedZ) {
-    let pos = null;
-
-    try { pos = api.getPosition(playerId); } catch (e) { pos = null; }
-
-    const hasPos = pos && isFinite(Number(pos[0])) && isFinite(Number(pos[2]));
-    const px = hasPos ? Number(pos[0]) : Number(clickedX);
-    const pz = hasPos ? Number(pos[2]) : Number(clickedZ);
-
-    if (!isFinite(px) || !isFinite(pz)) return false;
-
-    const dx = px - CRATE_DEALER.x;
-    const dz = pz - CRATE_DEALER.z;
-
-    return Math.sqrt(dx * dx + dz * dz) <= CRATE_DEALER.range + 1;
-}
-
 // What each roll pool is called on the odds board. Pools are matched by
 // identity against the crate tables, so renaming an item can never leave a
 // tile describing loot the crate no longer hands out.
@@ -5326,137 +5027,36 @@ function crateOddsText(crate) {
     return out;
 }
 
-// A shop tile is the crate's whole pitch: its own sprite, its headline and a
-// line for every single outcome, coloured by rarity.
-function crateTileDescription(crate) {
-    const parts = [];
+// The one way a crate is sold. /crate buy and the per-crate blocks in
+// crates/ both land here, so a crate costs the same however it is bought.
+function buyCrate(playerId, crate) {
+    if (!crate) return false;
 
-    parts.push({ str: fmtNum(crate.price) + " " + CFG.CURRENCY_NAME, style: styleFor("#ffff55") });
-    parts.push({ str: "  " + crate.headline, style: styleFor(crate.colour) });
-    parts.push({ str: "\nEvery roll below is what this crate can pay.", style: styleFor("#8a8a8a") });
-
-    // Every outcome stays on the tile, but rows that share a rarity share
-    // one style object instead of carrying their own. A shop is a client
-    // option like the side panel, and the client drops an option that is
-    // too large, so the fewer bytes a tile spends on styling the better.
-    const rows = crateOdds(crate);
-    const groups = [];
-    const byRarity = {};
-
-    for (let i = 0; i < rows.length; i++) {
-        const key = rows[i].r || "common";
-
-        if (!byRarity[key]) {
-            byRarity[key] = { r: key, items: [] };
-            groups.push(byRarity[key]);
-        }
-
-        byRarity[key].items.push(pctText(rows[i].pct) + " " + rows[i].text);
-    }
-
-    for (let i = 0; i < groups.length; i++) {
-        parts.push({ str: "\n" + groups[i].items.join("  \u00b7  "), style: styleFor(RARITY_COLOUR[groups[i].r] || "#ffffff") });
-    }
-
-    return parts;
-}
-
-// Tiles are ordered by their place in the CRATES table, so adding a crate
-// there puts it in the menu in the right spot with no second list to edit.
-function crateMenuSort(crate) {
-    let index = 0;
-
-    for (let i = 0; i < CRATES.length; i++) {
-        if (CRATES[i] === crate) index = i;
-    }
-
-    return (CRATES.length - index) * 10;
-}
-
-function crateShopTile(crate) {
-    const colour = colourName(crate.colour);
-    const price = fmtNum(crate.price) + " " + CFG.CURRENCY_NAME;
-
-    return {
-        image: crate.icon,
-        imageColour: colour,
-        cost: 0,
-        currency: CFG.CURRENCY_ID,
-        canBuy: true,
-        hidden: false,
-        buyButtonText: { str: "Open - " + price, style: { color: colour, colour: colour } },
-        customTitle: [{ icon: crate.icon }, { str: " " + crate.name, style: styleFor(crate.colour) }],
-        description: crateTileDescription(crate),
-        sortPriority: crateMenuSort(crate),
-    };
-}
-
-function setupCrateShop() {
-    try {
-        api.configureShopCategory(CRATE_SHOP.key, {
-            customTitle: CRATE_SHOP.title,
-            description: CRATE_SHOP.blurb,
-            sortPriority: CRATE_SHOP.sort,
-            autoSelectCategory: false,
-        });
-    } catch (e) {
-        noteError("crate shop", e);
-    }
-
-    // The tiles are built once. Rebuilding nine big tiles on every
-    // right-click was pure waste inside the click callback.
-    if (crateShopReady) return;
-    crateShopReady = true;
-
-    for (let i = 0; i < CRATES.length; i++) {
-        const crate = CRATES[i];
-
-        try {
-            api.createShopItem(CRATE_SHOP.key, "crate_" + crate.id, crateShopTile(crate));
-        } catch (e) {
-            noteError("crate tile " + crate.id, e);
-        }
-    }
-}
-
-function crateByShopKey(itemKey) {
-    for (let i = 0; i < CRATES.length; i++) {
-        if ("crate_" + CRATES[i].id === itemKey) return CRATES[i];
-    }
-
-    return null;
-}
-
-function buyCrateFromShop(playerId, crate) {
     const d = ensure(playerId);
 
     if (d.shards < crate.price) {
         say(playerId, "Need " + fmtNum(crate.price - d.shards) + " more " + CFG.CURRENCY_NAME + " for a " + crate.name + ".", "#ff5555");
-        say(playerId, "Quest for shards, then come back.", "#8a8a8a");
         return false;
     }
 
     if (!takeShards(playerId, crate.price)) return false;
 
-    say(playerId, "Bought a " + crate.name + " for " + fmtNum(crate.price) + " " + CFG.CURRENCY_NAME + ".", "#b98cff");
+    say(playerId, "Opened a " + crate.name + " for " + fmtNum(crate.price) + " " + CFG.CURRENCY_NAME + ".", "#b98cff");
     openCrate(playerId, crate);
     return true;
 }
 
-function openCrateDealer(playerId) {
-    ensure(playerId);
-    setupCrateShop();
+// Used by the per-crate blocks in crates/, and by anything else that wants to
+// sell a crate without knowing the table.
+function buyCrateById(playerId, id) {
+    const crate = crateById(id);
 
-    try {
-        api.openShop(playerId, false, CRATE_SHOP.key, false);
-        return;
-    } catch (e) {
-        noteError("crate shop open", e);
+    if (!crate) {
+        say(playerId, "Unknown crate \"" + String(id) + "\". /crates lists all nine.", "#ff5555");
+        return false;
     }
 
-    // A client that refuses the shop still gets the list and /crate buy.
-    say(playerId, "The crate menu would not open - /crates still works. /diag shows the error.", "#ff5555");
-    cmdCrates(playerId);
+    return buyCrate(playerId, crate);
 }
 
 // ---------------- BOOT ----------------
@@ -5465,7 +5065,6 @@ loadLists();
 loadStaff();
 pruneStaff();
 setupStaffShop();
-setupHomesShop();
 
 try {
     loadGiverYaw();
@@ -5485,14 +5084,3 @@ try {
     noteError("quest givers", e);
 }
 
-try {
-    setupCrateDealer();
-} catch (e) {
-    noteError("crate dealer", e);
-}
-
-try {
-    setupCrateShop();
-} catch (e) {
-    noteError("crate shop", e);
-}
