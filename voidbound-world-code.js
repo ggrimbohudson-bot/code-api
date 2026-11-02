@@ -182,80 +182,154 @@ const RANK_ALIASES = {
 
 // Weighted crate tables. Expected payout is deliberately below the
 // price, so crates are a shard sink rather than a money printer.
+// Every item a crate can hand out, grouped into the pools the tables use.
+// Each name is taken from the game's own item list, so a crate can never roll
+// something that does not exist.
+const ARMOUR_SETS = {
+    geo: ["Geo Helmet", "Geo Chestplate", "Geo Gauntlets", "Geo Leggings", "Geo Boots"],
+    serpentite: ["Serpentite Helmet", "Serpentite Chestplate", "Serpentite Gauntlets", "Serpentite Leggings", "Serpentite Boots"],
+    astral: ["Astral Helmet", "Astral Chestplate", "Astral Gauntlets", "Astral Leggings", "Astral Boots"],
+    sanguine: ["Sanguine Helmet", "Sanguine Chestplate", "Sanguine Gauntlets", "Sanguine Leggings", "Sanguine Boots"],
+    spectral: ["Spectral Helmet", "Spectral Chestplate", "Spectral Gauntlets", "Spectral Leggings", "Spectral Boots"],
+};
+
+const SPECTRAL_PIECES = ARMOUR_SETS.spectral;
+
+const TOOL_SETS = {
+    starter: ["Stone Pickaxe", "Iron Pickaxe", "Stone Sword", "Iron Sword", "Iron Axe"],
+    good: ["Diamond Pickaxe", "Diamond Sword", "Diamond Axe", "Moonstone Pickaxe", "Moonstone Axe", "Knight Sword"],
+    serpentite: ["Serpentite Pickaxe", "Serpentite Axe", "Serpentite Sword", "Serpentite Hoe"],
+    spectral: ["Spectral Sword", "Spectral Spear", "Spectral Dagger", "Spectral Mace"],
+};
+
 const CRATES = [
     {
         id: "void",
         name: "Void Crate",
         price: 250,
-        blurb: "The starter gamble. Cheap, quick, mostly small shard drops.",
+        blurb: "The starter gamble. Small shard drops, starter tools with a little enchant.",
         entries: [
-            { w: 55, r: "common", s: [60, 140] },
+            { w: 49, r: "common", s: [60, 140] },
             { w: 30, r: "uncommon", s: [150, 300] },
             { w: 13, r: "rare", s: [320, 520] },
             { w: 2, r: "epic", s: [900, 1200] },
+            { w: 6, r: "uncommon", pick: TOOL_SETS.starter, ench: [1, 1] },
         ],
     },
     {
         id: "eclipse",
         name: "Eclipse Crate",
         price: 750,
-        blurb: "Mid tier. Better odds, bigger swings.",
+        blurb: "Mid tier. Better odds, bigger swings, proper tools.",
         entries: [
-            { w: 50, r: "common", s: [200, 350] },
+            { w: 44, r: "common", s: [200, 350] },
             { w: 32, r: "uncommon", s: [350, 650] },
             { w: 15, r: "rare", s: [700, 1100] },
             { w: 3, r: "epic", s: [2400, 3000] },
+            { w: 6, r: "rare", pick: TOOL_SETS.good, ench: [2, 2] },
+        ],
+    },
+    {
+        id: "geo",
+        name: "Geo Crate",
+        price: 1200,
+        blurb: "Geo country. Diamond tools and a 1% shot at Geo armour.",
+        entries: [
+            { w: 60, r: "common", s: [250, 450] },
+            { w: 25, r: "uncommon", s: [450, 800] },
+            { w: 10, r: "rare", s: [900, 1500] },
+            { w: 2, r: "epic", s: [3000, 4200] },
+            { w: 2, r: "rare", pick: TOOL_SETS.starter.concat(["Geo Sword"]), ench: [2, 2] },
+            { w: 1, r: "epic", pick: ARMOUR_SETS.geo, ench: [2, 2], announce: true },
+        ],
+    },
+    {
+        id: "serpentite",
+        name: "Serpentite Crate",
+        price: 1800,
+        blurb: "Snake-metal. Serpenite tools, and 1% for a Serpenite piece.",
+        entries: [
+            { w: 57, r: "common", s: [400, 700] },
+            { w: 26, r: "uncommon", s: [700, 1200] },
+            { w: 12, r: "rare", s: [1300, 2200] },
+            { w: 3, r: "epic", s: [4500, 6000] },
+            { w: 1, r: "rare", pick: TOOL_SETS.serpentite, ench: [2, 3] },
+            { w: 1, r: "epic", pick: ARMOUR_SETS.serpentite, ench: [2, 2], announce: true },
         ],
     },
     {
         id: "nova",
         name: "Nova Crate",
         price: 2000,
-        blurb: "High roller. Can drop diamonds.",
+        blurb: "High roller. Can drop diamonds and heavily enchanted tools.",
         entries: [
-            { w: 45, r: "common", s: [600, 1000] },
+            { w: 40, r: "common", s: [600, 1000] },
             { w: 33, r: "uncommon", s: [1000, 1800] },
             { w: 18, r: "rare", s: [2000, 3200] },
             { w: 1, r: "rare", i: "Diamond", ia: [2, 5] },
             { w: 3, r: "epic", s: [6000, 9000] },
+            { w: 5, r: "rare", pick: TOOL_SETS.good, ench: [3, 3] },
+        ],
+    },
+    {
+        id: "astral",
+        name: "Astral Crate",
+        price: 3600,
+        blurb: "Star-metal. Astral blades and a 1% Astral armour roll.",
+        entries: [
+            { w: 54, r: "common", s: [800, 1300] },
+            { w: 27, r: "uncommon", s: [1300, 2100] },
+            { w: 13, r: "rare", s: [2200, 3600] },
+            { w: 3, r: "epic", s: [7000, 10000] },
+            { w: 2, r: "rare", pick: TOOL_SETS.good.concat(["Astral Sword"]), ench: [3, 3] },
+            { w: 1, r: "epic", pick: ARMOUR_SETS.astral, ench: [3, 3], announce: true },
         ],
     },
     {
         id: "mythic",
         name: "Mythic Crate",
         price: 5000,
-        blurb: "Endgame crate. Moonstone and jackpot shard rolls.",
+        blurb: "Endgame crate. Moonstone, level 4 tools and a jackpot roll.",
         entries: [
-            { w: 40, r: "common", s: [1500, 2600] },
+            { w: 38, r: "common", s: [1500, 2600] },
             { w: 33, r: "uncommon", s: [2600, 4500] },
             { w: 20, r: "rare", s: [5000, 8000] },
             { w: 3, r: "epic", i: "Moonstone", ia: [1, 3] },
+            { w: 4, r: "rare", pick: TOOL_SETS.good, ench: [4, 4] },
             { w: 2, r: "jackpot", s: [20000, 35000] },
+        ],
+    },
+    {
+        id: "sanguine",
+        name: "Sanguine Crate",
+        price: 8000,
+        blurb: "Blood-metal. Level 4 tools and a 1% Sanguine armour roll.",
+        entries: [
+            { w: 53, r: "common", s: [1800, 2800] },
+            { w: 27, r: "uncommon", s: [2800, 4500] },
+            { w: 14, r: "rare", s: [4500, 7500] },
+            { w: 4, r: "epic", s: [16000, 24000] },
+            { w: 1, r: "rare", pick: TOOL_SETS.good.concat(["Sanguine Sword"]), ench: [4, 4] },
+            { w: 1, r: "void", pick: ARMOUR_SETS.sanguine, ench: [4, 4], announce: true },
         ],
     },
     {
         id: "voidbound",
         name: "Voidbound Crate",
         price: 25000,
-        blurb: "The dealer's best. One in a hundred holds a heavily enchanted Spectral piece.",
+        blurb: "The dealer's best. One in a hundred holds a maxed Spectral piece.",
         entries: [
             { w: 34, r: "common", s: [9000, 13000] },
-            { w: 28, r: "uncommon", s: [13000, 19000] },
+            { w: 24, r: "uncommon", s: [13000, 19000] },
             { w: 21, r: "rare", s: [19000, 28000] },
             { w: 12, r: "epic", s: [32000, 48000] },
             { w: 4, r: "jackpot", s: [70000, 110000] },
+            { w: 4, r: "rare", pick: TOOL_SETS.spectral, ench: [5, 5], announce: true },
 
-            // Exactly one weight in a hundred. This single line is the 1%
-            // Spectral armour roll, so the odds cannot drift when other
-            // entries are edited.
-            { w: 1, r: "void", armour: true, ia: [5, 5] },
+            // Exactly one weight in a hundred: the maxed Spectral armour roll.
+            { w: 1, r: "void", pick: ARMOUR_SETS.spectral, ench: [5, 5], announce: true },
         ],
     },
-];
-
-const SPECTRAL_PIECES = [
-    "Spectral Helmet", "Spectral Chestplate", "Spectral Gauntlets",
-    "Spectral Leggings", "Spectral Boots",
 ];
 
 const RARITY_COLOUR = {
@@ -1006,39 +1080,32 @@ function openCrate(playerId, crate) {
     const colour = RARITY_COLOUR[entry.r] || "#ffffff";
     say(playerId, "Opening " + crate.name + "...", "#9a9a9a");
 
-    if (entry.armour) {
-        // The 1-in-100 line: one Spectral piece, enchanted as hard as the
-        // enchanting table allows.
-        const piece = SPECTRAL_PIECES[randInt(0, SPECTRAL_PIECES.length - 1)];
-        const level = entry.ia ? randInt(entry.ia[0], entry.ia[1]) : 5;
-        const given = giveEnchanted(playerId, piece, level);
+    // An entry either names one item or hands a pool to pick from (an armour
+    // set or a tool set). Anything with an enchant range arrives enchanted.
+    const chosen = entry.pick ? entry.pick[randInt(0, entry.pick.length - 1)] : entry.i;
 
-        if (!given) {
-            // Inventory full: pay it out in shards rather than losing it.
-            const fallback = 40000;
-            addShards(playerId, fallback, true);
-            say(playerId, "Inventory full - the armour was converted to " + fmtNum(fallback) + " " + CFG.CURRENCY_NAME + ".", "#ffaa55");
+    if (chosen) {
+        const level = entry.ench ? randInt(entry.ench[0], entry.ench[1]) : 0;
+        const amount = level ? 1 : randInt(entry.ia ? entry.ia[0] : 1, entry.ia ? entry.ia[1] : 1);
+        let given = 0;
+
+        if (level) {
+            given = giveEnchanted(playerId, chosen, level);
         } else {
-            say(playerId, "[VOIDBOUND] " + piece + " x" + given + " - enchanted to level " + level + "!", colour);
-            broadcast(nameOf(playerId) + " pulled an enchanted " + piece + " from a " + crate.name + "!", colour);
-            try { api.playSound(playerId, "levelup", 1, 1); } catch (e) { }
+            try { given = api.giveItem(playerId, chosen, amount); } catch (e) { given = 0; }
         }
-    } else if (entry.i) {
-        const amount = randInt(entry.ia ? entry.ia[0] : 1, entry.ia ? entry.ia[1] : 1);
-        let given = amount;
-        try { given = api.giveItem(playerId, entry.i, amount); } catch (e) { given = 0; }
 
         if (!given) {
             // Inventory full: pay the item out in shards instead of losing it.
-            const fallback = 120 * amount;
+            const fallback = entry.fallback || 120 * amount;
             addShards(playerId, fallback, true);
             say(playerId, "Inventory full - converted to " + fmtNum(fallback) + " " + CFG.CURRENCY_NAME + ".", "#ffaa55");
         } else {
-            say(playerId, "[" + entry.r.toUpperCase() + "] " + entry.i + " x" + given + "!", colour);
-        }
+            say(playerId, "[" + entry.r.toUpperCase() + "] " + chosen + (level ? " - enchant " + level : " x" + given) + "!", colour);
 
-        if (entry.r === "epic" || entry.r === "jackpot" || entry.r === "void") {
-            broadcast(nameOf(playerId) + " unboxed " + entry.i + " x" + amount + " from a " + crate.name + "!", colour);
+            if (entry.announce || entry.r === "epic" || entry.r === "jackpot") {
+                broadcast(nameOf(playerId) + " unboxed " + chosen + (level ? " (enchant " + level + ")" : "") + " from a " + crate.name + "!", colour);
+            }
         }
     } else {
         const amount = randInt(entry.s[0], entry.s[1]);
@@ -1051,7 +1118,7 @@ function openCrate(playerId, crate) {
     }
 
     try { api.playSound(playerId, "chestOpen", 1, 1); } catch (e) { }
-    if (entry.r === "epic" || entry.r === "jackpot" || entry.r === "void") {
+    if (entry.announce || entry.r === "epic" || entry.r === "jackpot" || entry.r === "void") {
         try { api.playSound(playerId, "levelup", 1, 1); } catch (e) { }
     }
 }
