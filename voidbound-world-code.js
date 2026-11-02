@@ -1852,9 +1852,31 @@ function setupHomesShop() {
     if (homesShopReady) return;
     homesShopReady = true;
 
-    for (let i = 0; i < HOME_SLOTS; i++) baseShopItem(HOMES_SHOP.key, "vb_home_" + (i + 1), HOME_IMAGE.locked);
-    baseShopItem(HOMES_SHOP.key, "vb_home_delete", HOME_IMAGE.delete);
-    baseShopItem(HOMES_SHOP.key, "vb_home_lobby", HOME_IMAGE.lobby);
+    // These copies are visible on purpose. Bloxd does not list a category that
+    // has nothing to show, and the per-player tiles are only added once a
+    // player is in the world, so hidden base tiles left the tab invisible.
+    const blank = { homes: [], homeSlots: 1 };
+    for (let i = 0; i < HOME_SLOTS; i++) blank.homes.push(null);
+
+    for (let i = 0; i < HOME_SLOTS; i++) {
+        try {
+            api.createShopItem(HOMES_SHOP.key, "vb_home_" + (i + 1), homeSlotTile(blank, i));
+        } catch (e) {
+            noteError("homes base slot", e);
+        }
+    }
+
+    try {
+        api.createShopItem(HOMES_SHOP.key, "vb_home_delete", homeDeleteTile());
+    } catch (e) {
+        noteError("homes base delete", e);
+    }
+
+    try {
+        api.createShopItem(HOMES_SHOP.key, "vb_home_lobby", homeLobbyTile());
+    } catch (e) {
+        noteError("homes base lobby", e);
+    }
 }
 
 function openHomesMenu(playerId) {
@@ -4838,6 +4860,9 @@ function perSecond(dt) {
 
 // ---------------- COMMAND ROUTER ----------------
 
+// Shown by /version and /help, so it is obvious which paste is live.
+const BUILD = "VB-HOMES-3";
+
 playerCommand = function (playerId, command) {
     ensure(playerId);
 
@@ -4845,7 +4870,13 @@ playerCommand = function (playerId, command) {
     const args = text.split(/\s+/);
     const cmd = (args[0] || "").toLowerCase();
 
+    if (cmd === "version" || cmd === "build") {
+        say(playerId, "Voidbound world code: " + BUILD, "#8fd0ff");
+        return;
+    }
+
     if (cmd === "help" || cmd === "commands" || cmd === "cmds") {
+        say(playerId, "World code " + BUILD, "#5a5a5a");
         cmdHelp(playerId);
         return false;
     }
