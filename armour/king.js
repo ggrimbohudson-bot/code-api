@@ -5,5 +5,5 @@
 // Unlocks at overall level 6, 60 player kills and 5h played,
 // then costs 7,000 Void Shards for all 4 pieces.
 //
-// In game: /armour buy king   then   /armour wear king
+// In game: /armour buy king   then wear all four pieces
 // From your own code: buyArmourById(playerId, "king");

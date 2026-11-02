@@ -66,7 +66,7 @@ function armourFile(a) {
     lines.push("// Unlocks at overall level " + a.level + ", " + a.kills + " player kills and " + hours(a.playtimeMs) + " played,");
     lines.push("// then costs " + commas(a.price) + " Void Shards for all " + PIECES.length + " pieces.");
     lines.push("//");
-    lines.push("// In game: /armour buy " + a.id + "   then   /armour wear " + a.id);
+    lines.push("// In game: /armour buy " + a.id + "   then wear all four pieces");
     lines.push("// From your own code: buyArmourById(playerId, \"" + a.id + "\");");
 
     return lines.join("\n") + "\n";
@@ -86,7 +86,7 @@ function readme() {
     lines.push("These are not survival armour, so the only way to get a set is from here.");
     lines.push("");
     lines.push("In game: `/armour` lists the sets, `/armour buy <id>` buys all four");
-    lines.push("pieces, and `/armour wear <id>` turns on the set ability.");
+    lines.push("pieces. Wearing all four in game turns the set ability on; durability only drops while the set is on, and a broken set must be bought again.");
     lines.push("");
     lines.push("| Set | P / H / R | Ability | Price | Unlocks at | Block |");
     lines.push("|---|---|---|---|---|---|");

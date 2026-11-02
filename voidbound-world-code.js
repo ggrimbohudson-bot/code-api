@@ -39,6 +39,7 @@ UPDATES_KEY: "vb_updates_v1",
 STAFF_KEY: "vb_staff_v1",
 MAX_GIVE: 256,
 MAX_GRANT_SHARDS: 10000000,
+ARMOUR_DURABILITY: 300,
 MAX_GRANT_LEVELS: 500,
 MAX_MUTE_MIN: 1440,
 MAX_TEMP_BAN_DAYS: 30,
@@ -57,7 +58,7 @@ const PERM = {
 panel: 1, staffchat: 1, warn: 1, tp: 1, players: 1, warns: 1,
 kick: 2, mute: 2, unmute: 2, tempban: 2,
 fly: 3, give: 3, gm: 3, ban: 3, unban: 3, tphere: 3, tppos: 3, banlist: 3, clearbans: 3,
-level: 3, shards: 3,
+level: 3, shards: 3, clearinv: 3,
 rank: 4, events: 4, updates: 4, clearlists: 4,
 };
 const RANK_ALIASES = {
@@ -201,10 +202,6 @@ function armourOwned(playerId, a) {
 const d = P[playerId];
 return !!(d && d.stats && d.stats.armour && d.stats.armour[a.id]);
 }
-function armourWorn(playerId) {
-const d = P[playerId];
-return d && d.stats ? String(d.stats.armourWorn || "") : "";
-}
 function armourStatsText(a) {
 return "P" + a.p + "  H" + a.h + "  R" + a.r;
 }
@@ -268,85 +265,129 @@ return false;
 }
 if (!d.stats.armour) d.stats.armour = {};
 d.stats.armour[a.id] = true;
+if (!d.stats.armourDur) d.stats.armourDur = {};
+d.stats.armourDur[a.id] = CFG.ARMOUR_DURABILITY;
 saveNow(playerId);
 say(playerId, "Bought the " + a.name + " set for " + fmtNum(a.price) + " " + CFG.CURRENCY_NAME + ".", a.colour);
 say(playerId, a.name + "  " + armourStatsText(a) + "  (ench " + armourEnchant(a) + ")  " + givenPieces + "/4 pieces", "#8fd0ff");
-say(playerId, "Ability: " + a.ability.name + " - " + a.ability.blurb + " /armour wear " + a.id, a.colour);
+say(playerId, "Ability: " + a.ability.name + " - " + a.ability.blurb + " Put all four pieces on to turn it on.", a.colour);
+say(playerId, "Durability " + fmtNum(CFG.ARMOUR_DURABILITY) + " - damage wears it down, a broken set must be bought again.", "#8a8a8a");
 gainXp(playerId, 40);
 return true;
 }
-function wearArmour(playerId, id) {
-const a = armourById(id);
-if (!a) {
-say(playerId, "Usage: /armour wear <set>  -  /armour lists them.", "#ff5555");
-return false;
+function armourPiecesOn(playerId) {
+for (let i = 0; i < ARMOUR_PIECES.length; i++) {
+let held = 0;
+try { held = api.getInventoryItemAmount(playerId, ARMOUR_PIECES[i]); } catch (e) { held = 0; }
+if (held > 0) return false;
 }
-if (!armourOwned(playerId, a)) {
-say(playerId, "You do not own the " + a.name + " set yet. /armour buy " + a.id, "#ff5555");
-return false;
+return true;
 }
+function armourDurability(playerId, a) {
+const d = P[playerId];
+if (!d || !d.stats || !d.stats.armourDur) return CFG.ARMOUR_DURABILITY;
+const value = Number(d.stats.armourDur[a.id]);
+return isFinite(value) ? Math.max(0, value) : CFG.ARMOUR_DURABILITY;
+}
+function armourDurText(playerId, a) {
+return fmtNum(armourDurability(playerId, a)) + "/" + fmtNum(CFG.ARMOUR_DURABILITY);
+}
+function armourEquipped(playerId, a) {
+if (!a || !armourOwned(playerId, a)) return false;
+if (armourDurability(playerId, a) <= 0) return false;
+return armourPiecesOn(playerId);
+}
+function activeArmour(playerId) {
+for (let i = 0; i < ARMOUR.length; i++) {
+if (armourEquipped(playerId, ARMOUR[i])) return ARMOUR[i];
+}
+return null;
+}
+function breakArmour(playerId, a) {
 const d = ensure(playerId);
-const current = armourById(armourWorn(playerId));
-if (current && current.id !== a.id) clearArmourAbility(playerId, current);
-d.stats.armourWorn = a.id;
-applyArmourAbility(playerId, a);
+if (d.stats.armour) delete d.stats.armour[a.id];
+if (!d.stats.armourDur) d.stats.armourDur = {};
+d.stats.armourDur[a.id] = 0;
+clearArmourAbility(playerId, a);
+const rtx = RT[playerId];
+if (rtx && rtx.armourSet === a.id) rtx.armourSet = "";
 saveNow(playerId);
-say(playerId, "Wearing the " + a.name + " set. " + a.ability.name + ": " + a.ability.blurb, a.colour);
-return true;
+say(playerId, "Your " + a.name + " set broke and is gone.", "#ff5555");
+say(playerId, "/armour buy " + a.id + " to buy the set again.", "#8a8a8a");
+staffBroadcast("[ARMOUR] " + nameOf(playerId) + " broke their " + a.name + " set.", "#ffcc00");
 }
-function takeOffArmour(playerId) {
-const current = armourById(armourWorn(playerId));
-if (!current) {
-say(playerId, "You are not wearing a set.", "#ff5555");
-return false;
+function damageArmour(playerId, a, amount) {
+const d = ensure(playerId);
+if (!d.stats.armourDur) d.stats.armourDur = {};
+const hit = Math.max(1, Math.round(Number(amount) || 0));
+const left = armourDurability(playerId, a) - hit;
+if (left <= 0) {
+breakArmour(playerId, a);
+return 0;
 }
-clearArmourAbility(playerId, current);
-P[playerId].stats.armourWorn = "";
+d.stats.armourDur[a.id] = left;
+const rt = RT[playerId] || (RT[playerId] = {});
+const low = Math.floor(CFG.ARMOUR_DURABILITY * 0.2);
+if (left <= low) {
+if (!rt.armourLowWarned) {
+rt.armourLowWarned = true;
+say(playerId, a.name + " durability " + fmtNum(left) + "/" + fmtNum(CFG.ARMOUR_DURABILITY) + " - nearly broken.", "#ffaa55");
+}
+} else {
+rt.armourLowWarned = false;
+}
 saveNow(playerId);
-say(playerId, "Took off the " + current.name + " set.", "#8a8a8a");
-return true;
+return left;
+}
+function armourHealth(playerId) {
+const rt = RT[playerId];
+if (!rt) return;
+let hp = -1;
+try { hp = api.getHealth(playerId); } catch (e) { hp = -1; }
+if (typeof hp !== "number" || !isFinite(hp) || hp < 0) return;
+const last = rt.lastHp;
+rt.lastHp = hp;
+if (last === undefined || hp >= last) return;
+const a = activeArmour(playerId);
+if (!a) return;
+damageArmour(playerId, a, last - hp);
 }
 function armourTick() {
 for (const id in P) {
-const worn = armourById(armourWorn(id));
-if (!worn) continue;
+const a = activeArmour(id);
 const rt = RT[id] || (RT[id] = {});
 const now = Date.now();
 if (rt.armourAt && now - rt.armourAt < 4000) continue;
 rt.armourAt = now;
-applyArmourAbility(id, worn);
+const prev = rt.armourSet ? armourById(rt.armourSet) : null;
+if (prev && (!a || prev.id !== a.id)) {
+clearArmourAbility(id, prev);
+rt.armourSet = "";
+}
+if (a) {
+applyArmourAbility(id, a);
+rt.armourSet = a.id;
+}
 }
 }
 function cmdArmour(playerId) {
-const d = ensure(playerId);
-const worn = armourById(armourWorn(playerId));
+const worn = activeArmour(playerId);
 say(playerId, "ARMOUR SETS", "#55aaff");
 say(playerId, "P protection  |  H health  |  R health regen", "#8a8a8a");
-say(playerId, "Wearing: " + (worn ? worn.name : "nothing"), worn ? worn.colour : "#8a8a8a");
+say(playerId, "Wearing: " + (worn ? worn.name + "  durability " + armourDurText(playerId, worn) : "nothing"), worn ? worn.colour : "#8a8a8a");
+say(playerId, "Wear all four pieces from your inventory - the set ability turns on by itself.", "#8a8a8a");
 for (let i = 0; i < ARMOUR.length; i++) {
 const a = ARMOUR[i];
 const owned = armourOwned(playerId, a);
 const missing = armourShortfall(playerId, a);
 say(playerId, "  " + a.name + " set - " + fmtNum(a.price) + " " + CFG.CURRENCY_NAME + "  " + armourStatsText(a) + "  " + a.ability.name, owned ? "#55ff55" : "#ffffff");
-say(playerId, "     " + (owned ? "owned - /armour wear " + a.id : missing.length ? "needs " + missing.join(", ") : "ready - /armour buy " + a.id) + "  |  " + a.ability.blurb, owned ? "#55ff55" : missing.length ? "#8a8a8a" : "#ffd75e");
+say(playerId, "     " + (owned ? "owned - durability " + armourDurText(playerId, a) : missing.length ? "needs " + missing.join(", ") : "ready - /armour buy " + a.id) + "  |  " + a.ability.blurb, owned ? "#55ff55" : missing.length ? "#8a8a8a" : "#ffd75e");
 }
 }
 function cmdArmourSub(playerId, args) {
 const sub = String(args[1] || "").toLowerCase();
-if (!sub) {
-cmdArmour(playerId);
-return;
-}
 if (sub === "buy") {
 buyArmourById(playerId, args.slice(2).join(" "));
-return;
-}
-if (sub === "wear" || sub === "equip") {
-wearArmour(playerId, args.slice(2).join(" "));
-return;
-}
-if (sub === "off" || sub === "remove") {
-takeOffArmour(playerId);
 return;
 }
 cmdArmour(playerId);
@@ -487,7 +528,7 @@ shardsEarned: 0,
 xp: 0,
 weapons: {},
 armour: {},
-armourWorn: "",
+armourDur: {},
 rewards: {},
 },
 quests: {},
@@ -522,7 +563,12 @@ for (const aid in old.stats.armour) {
 if (old.stats.armour[aid]) d.stats.armour[aid] = true;
 }
 }
-if (typeof old.stats.armourWorn === "string") d.stats.armourWorn = old.stats.armourWorn;
+if (old.stats.armourDur && typeof old.stats.armourDur === "object") {
+for (const ad in old.stats.armourDur) {
+const av = Number(old.stats.armourDur[ad]);
+d.stats.armourDur[ad] = isFinite(av) ? Math.max(0, av) : CFG.ARMOUR_DURABILITY;
+}
+}
 if (old.stats.rewards && typeof old.stats.rewards === "object") {
 for (const rkey in old.stats.rewards) {
 if (old.stats.rewards[rkey]) d.stats.rewards[rkey] = true;
@@ -1409,9 +1455,10 @@ say(playerId, "  /weapon buy <id> - buy one", "#ffffff");
 say(playerId, "  /weapon info <id> - D, S, C and the cost", "#ffffff");
 say(playerId, "  /armour - sets, P/H/R, prices and abilities", "#ffffff");
 say(playerId, "  /armour buy <set> - the full four piece set", "#ffffff");
-say(playerId, "  /armour wear <set> | /armour off", "#ffffff");
+say(playerId, "  /armour wear is gone - just wear all four pieces in game", "#8a8a8a");
 say(playerId, "  /rewards - playtime rewards", "#ffffff");
 say(playerId, "  /rewards claim - take everything ready", "#ffffff");
+if (hasPerm(playerId, "clearinv")) say(playerId, "  /clearinv <player> - empty a player's inventory", "#ffffff");
 say(playerId, "HOMES", "#55aaff");
 say(playerId, "  /home [1-" + HOME_SLOTS + "] - teleport home", "#ffffff");
 say(playerId, "  /sethome [1-" + HOME_SLOTS + "] - set a home here", "#ffffff");
@@ -1436,8 +1483,6 @@ const r = rankInfo(playerId);
 say(playerId, "STAFF (" + r.name + ")", r.colour);
 say(playerId, "  Press B or N - staff menu with every tool you can use", "#ffffff");
 say(playerId, "  /admin - text version of the same panel", "#ffffff");
-say(playerId, "  /giverturn <type> [degrees] - aim a quest giver", "#ffffff");
-say(playerId, "  /giverskin <type> [skin|next] - change a giver's skin", "#ffffff");
 if (hasPerm(playerId, "level")) say(playerId, "  /givelevel <player> <levels>  |  /setlevel <player> <level>", "#ffffff");
 if (hasPerm(playerId, "shards")) say(playerId, "  /giveshards <player> <amount>  |  /takeshards <player> <amount>", "#ffffff");
 }
@@ -1723,6 +1768,29 @@ say(target, "Staff gave you " + fmtNum(cap) + " " + CFG.CURRENCY_NAME + " - bala
 staffBroadcast("[STAFF] " + nameOf(playerId) + " gave " + nameOf(target) + " " + fmtNum(cap) + " " + CFG.CURRENCY_NAME + ".", "#ffcc00");
 }
 pushRightInfo(target, true);
+}
+function cmdClearInv(playerId, args) {
+if (!hasPerm(playerId, "clearinv")) {
+deny(playerId, "clearinv");
+return;
+}
+const targetName = args[1];
+if (!targetName) {
+say(playerId, "Usage: /clearinv <player>", "#ff5555");
+return;
+}
+const target = targetOrComplain(playerId, targetName);
+if (!target) return;
+try {
+api.clearInventory(target);
+} catch (e) {
+noteError("clearinv", e);
+say(playerId, "Could not clear that inventory.", "#ff5555");
+return;
+}
+say(playerId, "Cleared " + nameOf(target) + "'s inventory.", "#55ff55");
+say(target, "Your inventory was cleared by staff.", "#ffaa55");
+staffBroadcast("[STAFF] " + nameOf(playerId) + " cleared " + nameOf(target) + "'s inventory.", "#ffcc00");
 }
 function cmdShards(playerId) {
 const d = ensure(playerId);
@@ -2642,6 +2710,7 @@ if (hasPerm(playerId, "tempban")) say(playerId, "  /tempban <player> [days] [rea
 if (hasPerm(playerId, "ban")) say(playerId, "  /ban <player> [reason]", "#ffffff");
 if (hasPerm(playerId, "unban")) say(playerId, "  /unban <player>", "#ffffff");
 if (hasPerm(playerId, "banlist")) say(playerId, "  /banlist - active bans", "#ffffff");
+if (hasPerm(playerId, "clearinv")) say(playerId, "  /clearinv <player> - wipe their inventory", "#ffffff");
 say(playerId, "TEAM", "#55aaff");
 say(playerId, "  /sc <message> - staff chat", "#ffffff");
 say(playerId, "  /staff - staff roster", "#ffffff");
@@ -3449,66 +3518,6 @@ for (let i = Math.max(0, LAST_ERRORS.length - 6); i < LAST_ERRORS.length; i++) {
 say(playerId, "  " + LAST_ERRORS[i], "#ff9a9a");
 }
 }
-function cmdGiverSkin(playerId, args) {
-if (!hasPerm(playerId, "panel")) {
-say(playerId, "Staff only.", "#ff5555");
-return;
-}
-const type = String(args[1] || "").toLowerCase();
-const wanted = String(args[2] || "").trim();
-if (!QUEST_TYPES[type]) {
-say(playerId, "Usage: /giverskin <fishing|hunting|mining|killing> [skin|next]", "#ff5555");
-for (const key in QUEST_TYPES) {
-say(playerId, "  " + key + " wears " + giverSkin(key), "#8a8a8a");
-}
-say(playerId, "Try /giverskin fishing next to cycle trader skins.", "#5a5a5a");
-return;
-}
-if (wanted === "next") {
-const at = SKIN_TRIES.indexOf(giverSkin(type));
-GIVER_SKINS[type] = SKIN_TRIES[(at + 1) % SKIN_TRIES.length];
-} else if (wanted) {
-GIVER_SKINS[type] = wanted.toLowerCase();
-if (!knownSkin(GIVER_SKINS[type])) {
-say(playerId, "Warning: " + GIVER_SKINS[type] + " is not in Bloxd's skin list.", "#ff9a9a");
-}
-} else {
-say(playerId, QUEST_TYPES[type].title + " wears " + giverSkin(type) + ".", "#8a8a8a");
-return;
-}
-saveGiverSkins();
-applyGiverSkin(type);
-say(playerId, QUEST_TYPES[type].title + " is now wearing " + giverSkin(type) + ".", "#55ff55");
-say(playerId, "If it still looks plain, this client does not know that name.", "#5a5a5a");
-}
-function cmdGiverTurn(playerId, args) {
-if (!hasPerm(playerId, "panel")) {
-say(playerId, "Staff only.", "#ff5555");
-return;
-}
-const type = String(args[1] || "").toLowerCase();
-if (type === "reset") {
-for (const key in QUEST_TYPES) GIVER_YAW[key] = 0;
-saveGiverYaw();
-for (const key in QUEST_TYPES) applyGiverYaw(key);
-say(playerId, "All givers back to facing the middle.", "#55ff55");
-return;
-}
-if (!QUEST_TYPES[type]) {
-say(playerId, "Usage: /giverturn <fishing|hunting|mining|killing|reset> [degrees]", "#ff5555");
-say(playerId, "Each use adds degrees, e.g. /giverturn fishing 90 turns it a quarter.", "#8a8a8a");
-for (const key in QUEST_TYPES) {
-say(playerId, "  " + key + " facing " + Math.round(giverYaw(key)) + " (nudge " + (GIVER_YAW[key] || 0) + ")", "#8a8a8a");
-}
-return;
-}
-const step = isFinite(Number(args[2])) ? Number(args[2]) : 90;
-GIVER_YAW[type] = ((GIVER_YAW[type] || 0) + step) % 360;
-saveGiverYaw();
-applyGiverYaw(type);
-say(playerId, QUEST_TYPES[type].title + " now faces " + Math.round(giverYaw(type)) + " degrees.", "#55ff55");
-say(playerId, "Keep using /giverturn " + type + " 90 until it looks right.", "#8a8a8a");
-}
 function setupQuestGivers() {
 for (const key in QUEST_TYPES) {
 if (QUEST_NPCS[key]) continue;
@@ -3856,6 +3865,7 @@ for (const id in P) {
 const d = P[id];
 const rt = RT[id];
 if (!d || !rt) continue;
+armourHealth(id);
 const minute = Math.floor(d.stats.playtimeMs / 60000);
 if (minute > rt.minute) {
 const gained = minute - rt.minute;
@@ -3871,7 +3881,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-ECON-7";
+const BUILD = "VB-CLEAN-8";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
@@ -3911,15 +3921,6 @@ questTalkThrottled(playerId, type);
 } else {
 say(playerId, "Usage: /quest <fishing|hunting|mining|killing>", "#ff5555");
 }
-return false;
-}
-if (cmd === "giverskin" || cmd === "skin") {
-cmdGiverSkin(playerId, args);
-return false;
-}
-if (cmd === "givertag" || cmd === "tags") {
-for (const key in QUEST_TYPES) applyGiverNameTag(key);
-say(playerId, "Giver name tags refreshed.", "#55ff55");
 return false;
 }
 if (cmd === "util" || cmd === "utilities" || cmd === "homesmenu") {
@@ -3999,10 +4000,6 @@ if (cmd === "diag" || cmd === "diagnose") {
 cmdDiag(playerId);
 return false;
 }
-if (cmd === "giverturn" || cmd === "faceturn") {
-cmdGiverTurn(playerId, args);
-return false;
-}
 if (cmd === "panel" || cmd === "hud") {
 cmdPanel(playerId);
 return false;
@@ -4063,6 +4060,10 @@ return false;
 }
 if (cmd === "tppos") {
 cmdTpPos(playerId, args);
+return false;
+}
+if (cmd === "clearinv" || cmd === "clearinventory" || cmd === "wipeinv") {
+cmdClearInv(playerId, args);
 return false;
 }
 if (cmd === "kick") {

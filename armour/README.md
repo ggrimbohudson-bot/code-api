@@ -9,7 +9,7 @@ whole set: Military Helmet, Military Chestplate, Military Leggings, Military Boo
 These are not survival armour, so the only way to get a set is from here.
 
 In game: `/armour` lists the sets, `/armour buy <id>` buys all four
-pieces, and `/armour wear <id>` turns on the set ability.
+pieces. Wearing all four in game turns the set ability on; durability only drops while the set is on, and a broken set must be bought again.
 
 | Set | P / H / R | Ability | Price | Unlocks at | Block |
 |---|---|---|---|---|---|

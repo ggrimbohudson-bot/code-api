@@ -5,5 +5,5 @@
 // Unlocks at overall level 5, 50 player kills and 4h played,
 // then costs 5,500 Void Shards for all 4 pieces.
 //
-// In game: /armour buy elite   then   /armour wear elite
+// In game: /armour buy elite   then wear all four pieces
 // From your own code: buyArmourById(playerId, "elite");

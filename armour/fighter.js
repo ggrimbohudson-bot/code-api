@@ -5,5 +5,5 @@
 // Unlocks at overall level 3, 30 player kills and 2h played,
 // then costs 3,000 Void Shards for all 4 pieces.
 //
-// In game: /armour buy fighter   then   /armour wear fighter
+// In game: /armour buy fighter   then wear all four pieces
 // From your own code: buyArmourById(playerId, "fighter");
