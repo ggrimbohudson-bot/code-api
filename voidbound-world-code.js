@@ -1354,6 +1354,7 @@ function cmdHelp(playerId) {
         say(playerId, "  Press B or N - staff menu with every tool you can use", "#ffffff");
         say(playerId, "  /admin - text version of the same panel", "#ffffff");
         say(playerId, "  /giverturn <type> [degrees] - aim a quest giver", "#ffffff");
+        say(playerId, "  /giverskin <type> [skin|next] - change a giver's skin", "#ffffff");
     }
 
     say(playerId, "  /diag - check givers, panel and recent errors", "#ffffff");
@@ -3110,6 +3111,34 @@ const GIVER_LOOKS = {
     killing: { size: 1.35, heads: ["trader_black"] },
 };
 
+// Which head cosmetic each giver wears. Saved, and switchable in game with
+// /giverskin, because not every client knows the same cosmetic names: if a
+// name is unknown the giver falls back to a plain person, which is what
+// "no skins" looks like.
+const GIVER_SKIN_KEY = "vb_giver_skin_v1";
+const GIVER_SKINS = {};
+const SKIN_TRIES = ["trader_black", "trader_blue", "trader_piggy"];
+
+function giverSkin(type) {
+    return GIVER_SKINS[type] || "trader_black";
+}
+
+function loadGiverSkins() {
+    let raw = null;
+    try { raw = api.getLobbyDbValue(GIVER_SKIN_KEY); } catch (e) { raw = null; }
+
+    let saved = {};
+    try { saved = raw ? JSON.parse(raw) : {}; } catch (e) { saved = {}; }
+
+    for (const key in QUEST_TYPES) {
+        GIVER_SKINS[key] = typeof saved[key] === "string" && saved[key] ? saved[key] : "trader_black";
+    }
+}
+
+function saveGiverSkins() {
+    try { api.setLobbyDbValue(GIVER_SKIN_KEY, JSON.stringify(GIVER_SKINS)); } catch (e) { }
+}
+
 function createGiver(key) {
     const giver = QUEST_TYPES[key];
     const look = GIVER_LOOKS[key] || { size: 1, heads: ["trader_black"] };
@@ -3122,7 +3151,7 @@ function createGiver(key) {
             eId = api.attemptCreateMeshEntity("Person", {
                 size: look.size,
                 pose: "standing",
-                textures: { head: look.heads[i] },
+                textures: { head: giverSkin(key) },
             }, name);
         } catch (e) {
             noteError("giver " + key + " skin " + look.heads[i], e);
@@ -3174,6 +3203,32 @@ function giverYaw(type) {
     return (base + (GIVER_YAW[type] || 0) + 360) % 360;
 }
 
+function applyGiverSkin(type) {
+    const eId = QUEST_NPCS[type];
+    if (!eId) return;
+
+    const look = GIVER_LOOKS[type] || { size: 1 };
+    const opts = { size: look.size, pose: "standing", textures: { head: giverSkin(type) } };
+
+    try {
+        api.updateMeshEntity(eId, "Person", opts);
+        return;
+    } catch (e) {
+        noteError("skin update " + type, e);
+    }
+
+    // Live update refused: rebuild the giver in place with the new skin.
+    try { api.deleteMeshEntity(eId); } catch (e) { }
+
+    const fresh = createGiver(type);
+    if (!fresh) return;
+
+    QUEST_NPCS[type] = fresh;
+
+    try { api.setPosition(fresh, QUEST_TYPES[type].x, QUEST_TYPES[type].y, QUEST_TYPES[type].z); } catch (e) { }
+    applyGiverYaw(type);
+}
+
 function applyGiverYaw(type) {
     const eId = QUEST_NPCS[type];
     if (!eId) return;
@@ -3191,7 +3246,7 @@ function cmdDiag(playerId) {
     say(playerId, "side panel " + (PANEL_OFF[playerId] ? "hidden by /panel" : "on"), "#8a8a8a");
 
     for (const key in QUEST_TYPES) {
-        say(playerId, "  " + key + " yaw " + Math.round(giverYaw(key)) + " nudge " + (GIVER_YAW[key] || 0), "#8a8a8a");
+        say(playerId, "  " + key + " skin " + giverSkin(key) + " yaw " + Math.round(giverYaw(key)) + " nudge " + (GIVER_YAW[key] || 0), "#8a8a8a");
     }
 
     if (!LAST_ERRORS.length) {
@@ -3204,6 +3259,43 @@ function cmdDiag(playerId) {
     for (let i = Math.max(0, LAST_ERRORS.length - 6); i < LAST_ERRORS.length; i++) {
         say(playerId, "  " + LAST_ERRORS[i], "#ff9a9a");
     }
+}
+
+function cmdGiverSkin(playerId, args) {
+    if (!hasPerm(playerId, "panel")) {
+        say(playerId, "Staff only.", "#ff5555");
+        return;
+    }
+
+    const type = String(args[1] || "").toLowerCase();
+    const wanted = String(args[2] || "").trim();
+
+    if (!QUEST_TYPES[type]) {
+        say(playerId, "Usage: /giverskin <fishing|hunting|mining|killing> [skin|next]", "#ff5555");
+
+        for (const key in QUEST_TYPES) {
+            say(playerId, "  " + key + " wears " + giverSkin(key), "#8a8a8a");
+        }
+
+        say(playerId, "Try /giverskin fishing next to cycle trader skins.", "#5a5a5a");
+        return;
+    }
+
+    if (wanted === "next") {
+        const at = SKIN_TRIES.indexOf(giverSkin(type));
+        GIVER_SKINS[type] = SKIN_TRIES[(at + 1) % SKIN_TRIES.length];
+    } else if (wanted) {
+        GIVER_SKINS[type] = wanted.toLowerCase();
+    } else {
+        say(playerId, QUEST_TYPES[type].title + " wears " + giverSkin(type) + ".", "#8a8a8a");
+        return;
+    }
+
+    saveGiverSkins();
+    applyGiverSkin(type);
+
+    say(playerId, QUEST_TYPES[type].title + " is now wearing " + giverSkin(type) + ".", "#55ff55");
+    say(playerId, "If it still looks plain, this client does not know that name.", "#5a5a5a");
 }
 
 function cmdGiverTurn(playerId, args) {
@@ -3737,6 +3829,11 @@ playerCommand = function (playerId, command) {
         return false;
     }
 
+    if (cmd === "giverskin" || cmd === "skin") {
+        cmdGiverSkin(playerId, args);
+        return false;
+    }
+
     if (cmd === "diag" || cmd === "diagnose") {
         cmdDiag(playerId);
         return false;
@@ -3913,6 +4010,12 @@ try {
     loadGiverYaw();
 } catch (e) {
     noteError("giver yaw", e);
+}
+
+try {
+    loadGiverSkins();
+} catch (e) {
+    noteError("giver skins", e);
 }
 
 try {
