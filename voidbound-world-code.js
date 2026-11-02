@@ -95,6 +95,9 @@ const CFG = {
     CURRENCY_COLOUR: "blue",
 
     SAVE_EVERY_MS: 60000,
+    // The client rejects a client option that is too large, and keeps
+    // rejecting it on every change, so the side panel is kept under this.
+    PANEL_LIMIT: 1900,
     BOARD_EVERY_MS: 4000,
 
     // Stepping into a purple portal drops you on the surface at a random
@@ -678,6 +681,18 @@ function fmtTime(ms) {
     return total + "s";
 }
 
+// Panel-safe time: no seconds, so a panel does not change (and get resent)
+// every single second while a player stands still.
+function fmtShortTime(ms) {
+    const total = Math.floor((Number(ms) || 0) / 1000);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+
+    if (h > 0) return h + "h " + m + "m";
+    if (m > 0) return m + "m";
+    return "<1m";
+}
+
 function fmtHours(ms) {
     return Math.round(((Number(ms) || 0) / 3600000) * 10) / 10;
 }
@@ -1219,7 +1234,7 @@ function rightInfoText(playerId) {
     // Line 3: playtime and combat record.
     out.push(segText("\n"));
     out.push(segIcon("fa-solid fa-clock-rotate-left", "#8fd0ff"));
-    out.push(segText(" " + fmtTime(d.stats.playtimeMs), "#8fd0ff"));
+    out.push(segText(" " + fmtShortTime(d.stats.playtimeMs), "#8fd0ff"));
     out.push(segText("   ", "#8a8a8a"));
     out.push(segIcon("fa-solid fa-swords", "#ff9a9a"));
     out.push(segText(" " + d.stats.kills + " K  " + d.stats.deaths + " D", "#ff9a9a"));
@@ -1228,51 +1243,43 @@ function rightInfoText(playerId) {
     const next = shardsToNextCrate(d);
     out.push(segText("\n"));
     if (next) {
-        out.push(segIcon("fa-solid fa-gem", "#b48cff"));
-        out.push(segText(" " + next.crate.name + " in " + fmtNum(next.missing), "#b48cff"));
+        out.push(segText("\n\u25c6 " + next.crate.name + " in " + fmtNum(next.missing), "#b48cff"));
     } else {
-        out.push(segIcon("fa-solid fa-gem", "#55ff55"));
-        out.push(segText(" All crates ready - /crates", "#55ff55"));
+        out.push(segText("\n\u25c6 All crates ready - /crates", "#55ff55"));
     }
 
     // One quest line per row, with the percent into the level and a bar.
-    out.push(segText("\n"));
-    out.push(segIcon("fa-solid fa-star", "#b48cff"));
-    out.push(segText(" LEVELS ", "#b48cff"));
+    // All four level lines in one segment: every segment carries its own
+    // style object and the client option has a hard size limit, so the
+    // handful of bytes saved here is what keeps the panel deliverable.
+    const levelLine = [];
 
     for (const key in QUEST_TYPES) {
-        const giver = QUEST_TYPES[key];
         const xp = skillOf(playerId, key).xp;
-
-        // One string per row: every segment carries its own style object, so
-        // fewer segments keeps the whole client option much smaller.
-        out.push(segText("\n" + giver.short + " Lv" + levelFor(xp) + "  " + levelPercent(xp) + "%  " + levelBar(xp), giver.colour));
+        levelLine.push(QUEST_TYPES[key].short + " Lv" + levelFor(xp) + " " + levelPercent(xp) + "%");
     }
+
+    out.push(segText("\n" + levelLine.join("  |  "), "#c9a6ff"));
 
     // One row per giver, worded exactly like the giver says it, so the panel
     // and the NPC can never disagree about what you are doing.
-    out.push(segText("\n"));
-    out.push(segIcon("fa-solid fa-flag", "#ffcc00"));
-    out.push(segText(" QUESTS ", "#ffcc00"));
+    out.push(segText("\n QUESTS ", "#ffcc00"));
 
     for (const key in QUEST_TYPES) {
         const giver = QUEST_TYPES[key];
         const quest = d.quests[key];
 
-        out.push(segText("\n"));
-
         // Nothing taken yet: point at the giver instead of hiding the row.
         if (!quest) {
-            out.push(segIcon(giver.icon, "#5a5a5a"));
-            out.push(segText(" " + giver.short + ": see the " + giver.title, "#5a5a5a"));
+            out.push(segText("\n" + giver.short + ": see " + giver.title, "#5a5a5a"));
             continue;
         }
 
         const ready = quest.have >= quest.need;
 
-        out.push(segIcon(giver.icon, ready ? "#55ff55" : giver.colour));
-        out.push(segText(" " + giver.short + " T" + (quest.tier || 1) + "  " + quest.have + "/" + quest.need + " " + giver.unit, ready ? "#55ff55" : "#dddddd"));
-        out.push(segText(ready ? "  CLAIM" : "", "#55ff55"));
+        // One segment per row: fewer segments keeps the whole client option
+        // small enough for the client to accept it.
+        out.push(segText("\n" + giver.short + " T" + (quest.tier || 1) + " " + quest.have + "/" + quest.need + " " + giver.unit + (ready ? "  CLAIM" : ""), ready ? "#55ff55" : giver.colour));
     }
 
     if (LISTS.events.items.length) {
@@ -1300,7 +1307,7 @@ function rightInfoPlain(playerId) {
         gameTitle(),
         (r.tag ? "[" + r.tag + "] " : "") + nameOf(playerId),
         fmtNum(d.shards) + " shards   #" + placeOf(playerId, "kills") + " kills",
-        fmtTime(d.stats.playtimeMs) + "   " + d.stats.kills + " K  " + d.stats.deaths + " D",
+        fmtShortTime(d.stats.playtimeMs) + "   " + d.stats.kills + " K  " + d.stats.deaths + " D",
     ];
 
     const next = shardsToNextCrate(d);
@@ -1315,7 +1322,7 @@ function rightInfoPlain(playerId) {
         const quest = d.quests[key];
         if (!quest) continue;
 
-        lines.push(QUEST_TYPES[key].short + " T" + (quest.tier || 1) + " " + quest.have + "/" + quest.need + (quest.have >= quest.need ? " CLAIM" : ""));
+        lines.push(QUEST_TYPES[key].short + " T" + (quest.tier || 1) + " " + quest.have + "/" + quest.need + " " + QUEST_TYPES[key].unit + (quest.have >= quest.need ? " CLAIM" : ""));
     }
 
     if (LISTS.events.items.length) {
@@ -1346,7 +1353,12 @@ function pushRightInfo(playerId, force) {
 
     rt.panelHidden = false;
 
-    const text = rightInfoText(playerId);
+    let text = rightInfoText(playerId);
+
+    // An oversized option is refused every time it changes, which is what the
+    // "Argument Too Large" spam was, so fall back to the plain version first.
+    if (JSON.stringify(text).length > CFG.PANEL_LIMIT) text = rightInfoPlain(playerId);
+
     const hash = JSON.stringify(text);
     const now = Date.now();
 
