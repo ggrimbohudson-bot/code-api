@@ -1067,17 +1067,6 @@ function takeShards(playerId, amount) {
     return true;
 }
 
-function shardsToNextCrate(d) {
-    let best = null;
-    for (let i = 0; i < CRATES.length; i++) {
-        const c = CRATES[i];
-        if (d.shards >= c.price) continue;
-        if (!best || c.price < best.price) best = c;
-    }
-    if (!best) return null;
-    return { crate: best, missing: best.price - d.shards };
-}
-
 // ---------------- CRATES ----------------
 
 function crateById(input) {
@@ -1352,15 +1341,6 @@ function rightInfoText(playerId) {
     out.push(segIcon("fa-solid fa-swords", "#ff9a9a"));
     out.push(segText(" " + d.stats.kills + " K  " + d.stats.deaths + " D", "#ff9a9a"));
 
-    // Line 4: how close the next crate is.
-    const next = shardsToNextCrate(d);
-    out.push(segText("\n"));
-    if (next) {
-        out.push(segText("\n\u25c6 " + next.crate.name + " in " + fmtNum(next.missing), "#b48cff"));
-    } else {
-        out.push(segText("\n\u25c6 All crates ready - /crates", "#55ff55"));
-    }
-
     // One quest line per row, with the percent into the level and a bar.
     // All four level lines in one segment: every segment carries its own
     // style object and the client option has a hard size limit, so the
@@ -1423,8 +1403,6 @@ function rightInfoPlain(playerId) {
         fmtShortTime(d.stats.playtimeMs) + "   " + d.stats.kills + " K  " + d.stats.deaths + " D",
     ];
 
-    const next = shardsToNextCrate(d);
-    lines.push(next ? next.crate.name + " in " + fmtNum(next.missing) : "All crates ready - /crates");
     for (const key in QUEST_TYPES) {
         const xp = skillOf(playerId, key).xp;
 
