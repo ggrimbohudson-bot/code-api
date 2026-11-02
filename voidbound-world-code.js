@@ -3196,7 +3196,7 @@ function createGiver(key) {
 // off by a quarter turn from what you expect, so each giver can be nudged
 // in game with /giverturn until it looks right. The nudge is saved in the
 // lobby data, so it only has to be done once.
-const GIVER_YAW_KEY = "vb_giver_yaw_v1";
+const GIVER_YAW_KEY = "vb_giver_yaw_v2";
 const GIVER_YAW = {};
 
 function loadGiverYaw() {
@@ -3216,9 +3216,15 @@ function saveGiverYaw() {
     try { api.setLobbyDbValue(GIVER_YAW_KEY, JSON.stringify(GIVER_YAW)); } catch (e) { }
 }
 
+// Confirmed in game by the owner. The geometry angle was 45 degrees out, so
+// these working values are pinned rather than derived from the positions.
+const GIVER_BASE_YAW = { fishing: 180, hunting: 60, mining: 315, killing: 225 };
+
 function giverYaw(type) {
     const giver = QUEST_TYPES[type];
-    const base = yawTo(giver.x, giver.z, QUEST_CENTRE[0], QUEST_CENTRE[2]);
+    const base = isFinite(GIVER_BASE_YAW[type])
+        ? GIVER_BASE_YAW[type]
+        : yawTo(giver.x, giver.z, QUEST_CENTRE[0], QUEST_CENTRE[2]);
 
     return (base + (GIVER_YAW[type] || 0) + 360) % 360;
 }
