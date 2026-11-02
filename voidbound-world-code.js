@@ -3232,6 +3232,10 @@ function applyGiverSkin(type) {
 
     try {
         api.updateMeshEntity(eId, "Person", opts);
+
+        // Updating a mesh drops its rotation back to zero, which is why only
+        // the givers nobody re-skinned kept facing the middle.
+        applyGiverYaw(type);
         return;
     } catch (e) {
         noteError("skin update " + type, e);
@@ -3247,6 +3251,13 @@ function applyGiverSkin(type) {
 
     try { api.setPosition(fresh, QUEST_TYPES[type].x, QUEST_TYPES[type].y, QUEST_TYPES[type].z); } catch (e) { }
     applyGiverYaw(type);
+}
+
+// Re-aim every giver. Anything that touches a mesh (a skin update, a client
+// resync) can zero its rotation, so this runs on a timer as well as after
+// boot and after /giver commands.
+function healGiverAims() {
+    for (const key in QUEST_NPCS) applyGiverYaw(key);
 }
 
 function applyGiverYaw(type) {
@@ -3757,6 +3768,8 @@ doPeriodicSave = function () {
     saveAll();
 };
 
+let lastGiverAimAt = 0;
+
 // Runs 20 times a second; heavy work is throttled.
 tick = function (ms) {
     const dt = Number(ms) || 50;
@@ -3780,6 +3793,12 @@ tick = function (ms) {
     if (boardAcc >= CFG.BOARD_EVERY_MS) {
         boardAcc = 0;
         boardTick();
+    }
+
+    // Keep the givers pointed at the square even if a client resets them.
+    if (Date.now() - lastGiverAimAt > 30000) {
+        lastGiverAimAt = Date.now();
+        healGiverAims();
     }
 };
 
