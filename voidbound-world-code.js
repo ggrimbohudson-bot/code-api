@@ -1097,7 +1097,9 @@ function openCrate(playerId, crate) {
 
         if (!given) {
             // Inventory full: pay the item out in shards instead of losing it.
-            const fallback = entry.fallback || 120 * amount;
+            // An enchanted set piece is worth far more than a stack of ore,
+            // so the compensation scales with what the crate costs.
+            const fallback = entry.fallback || (level ? Math.round(crate.price * 0.6) : 120 * amount);
             addShards(playerId, fallback, true);
             say(playerId, "Inventory full - converted to " + fmtNum(fallback) + " " + CFG.CURRENCY_NAME + ".", "#ffaa55");
         } else {
