@@ -89,6 +89,8 @@
 //    /event add|remove|clearideas
 //    /updates add|remove
 //
+//  B MENU BUTTONS: Utilities (everyone), Staff menu (N) and Flight (F).
+//
 //  HOTKEYS for staff: N = staff menu, F = fly.
 // ============================================================
 
@@ -1527,6 +1529,8 @@ const HOME_ICONS = {
     lobby: "Compass",
 };
 
+let utilShopReady = false;
+
 const UTIL_SHOP = {
     key: "vb_util",
     title: "Utilities",
@@ -1756,6 +1760,11 @@ function setupUtilShop() {
     } catch (e) {
         noteError("utilities shop", e);
     }
+
+    // Base tiles exist once, so every slot has something for a player copy
+    // to sit on. Re-creating them on every open just threw work away.
+    if (utilShopReady) return;
+    utilShopReady = true;
 
     for (let i = 0; i < HOME_SLOTS; i++) baseShopItem(UTIL_SHOP.key, "vb_home_" + (i + 1), HOME_ICONS.locked);
     baseShopItem(UTIL_SHOP.key, "vb_home_lobby", HOME_ICONS.lobby);
@@ -2305,20 +2314,27 @@ function targetOrComplain(playerId, name) {
     return target;
 }
 
-function staffButtonsFor(playerId) {
-    if (rankLevel(playerId) < 1) return [];
-
+// The buttons in the B menu. Utilities is first and belongs to everyone,
+// so a normal player has one obvious way into homes and the lobby spawn.
+// Staff buttons are added on top of it, never instead of it.
+function menuButtonsFor(playerId) {
     const buttons = [
-        { id: "vb_panel", icon: "gear", keycode: "KeyN", description: "Staff menu (B)" },
+        { id: "vb_util", icon: "compass", description: "Homes and lobby spawn (B)" },
     ];
+
+    if (rankLevel(playerId) < 1) return buttons;
+
+    buttons.push({ id: "vb_panel", icon: "gear", keycode: "KeyN", description: "Staff menu (B)" });
+
     if (hasPerm(playerId, "fly")) {
         buttons.push({ id: "vb_fly", icon: "feather", keycode: "KeyF", description: "Toggle flight" });
     }
+
     return buttons;
 }
 
-function syncStaffButtons(playerId) {
-    try { api.setClientOption(playerId, "customButtons", staffButtonsFor(playerId)); } catch (e) { }
+function syncClientButtons(playerId) {
+    try { api.setClientOption(playerId, "customButtons", menuButtonsFor(playerId)); } catch (e) { }
 }
 
 // ----- flight / movement -----
@@ -3121,7 +3137,7 @@ function cmdRank(playerId, args) {
 
     if (target) {
         say(target, "Your Voidbound rank is now " + label + ".", RANKS[want].colour);
-        syncStaffButtons(target);
+        syncClientButtons(target);
         syncBoard(target);
         applyRankCosmetics(target);
         pushRightInfo(target);
@@ -4439,7 +4455,7 @@ onPlayerJoin = function (playerId) {
 
     syncShards(playerId);
     setupBoard(playerId);
-    syncStaffButtons(playerId);
+    syncClientButtons(playerId);
 
     // Nametag colour and glowing rank subtitle first, then the board
     // row, so a rejected nametag setting cannot take the row with it.
@@ -4512,6 +4528,11 @@ onPlayerChat = function (playerId, chatMessage, channelName) {
 };
 
 onPlayerPressedButton = function (playerId, buttonId) {
+    if (buttonId === "vb_util") {
+        openUtilMenu(playerId);
+        return;
+    }
+
     if (buttonId === "vb_panel") {
         ensure(playerId);
         openStaffMenu(playerId, SHOP_CATS.staff.key);
