@@ -97,6 +97,17 @@ const CFG = {
     SAVE_EVERY_MS: 60000,
     BOARD_EVERY_MS: 4000,
 
+    // Stepping into a purple portal drops you on the surface at a random
+    // spot. Distances are measured from RTP_CENTRE as [x, z].
+    PORTAL_CHECK_MS: 400,
+    PORTAL_COOLDOWN_MS: 4000,
+    RTP_CENTRE: [0, 0],
+    RTP_MIN_DIST: 80,
+    RTP_RADIUS: 500,
+    RTP_TOP_Y: 160,
+    RTP_MIN_Y: -60,
+    RTP_TRIES: 10,
+
     TOP_N: 10,
     MAX_PAY: 1000000,
     PAY_COOLDOWN_MS: 1000,
@@ -1935,6 +1946,129 @@ function cmdTpPos(playerId, args) {
         say(playerId, "Teleported to " + Math.round(x) + ", " + Math.round(y) + ", " + Math.round(z) + ".", "#55ff55");
     } catch (e) {
         say(playerId, "Teleport failed.", "#ff5555");
+    }
+}
+
+// ----- purple portal rtp -----
+// A purple (or magenta) portal block is a doorway back to the surface: walk
+// into one and you land on a random patch of open ground. Nothing is placed
+// in the world, so it works on any portal built from these blocks.
+
+function blockNameAt(x, y, z) {
+    try {
+        return String(api.getBlock(Math.floor(x), Math.floor(y), Math.floor(z)) || "");
+    } catch (e) {
+        return "";
+    }
+}
+
+function isPortalBlock(name) {
+    const lower = String(name || "").toLowerCase();
+
+    return lower.indexOf("portal") !== -1 && (lower.indexOf("purple") !== -1 || lower.indexOf("magenta") !== -1);
+}
+
+// A portal is usually two blocks tall, so the legs, waist and head are all
+// checked rather than just the block under the feet.
+function portalAtPlayer(playerId) {
+    let pos;
+
+    try { pos = api.getPosition(playerId); } catch (e) { return null; }
+    if (!pos || !isFinite(pos[0]) || !isFinite(pos[1]) || !isFinite(pos[2])) return null;
+
+    for (let dy = 0; dy <= 1.7; dy += 0.85) {
+        const name = blockNameAt(pos[0], pos[1] + dy, pos[2]);
+        if (isPortalBlock(name)) return name;
+    }
+
+    return null;
+}
+
+function blockIsSolid(x, y, z) {
+    try {
+        return api.getBlockSolidity(Math.floor(x), Math.floor(y), Math.floor(z)) === true;
+    } catch (e) {
+        // Unreadable ground is treated as solid, so the scan keeps descending
+        // instead of teleporting someone into the sky.
+        return true;
+    }
+}
+
+// Highest ground with two clear blocks above it, or null if there is none.
+function findSurface(x, z) {
+    let y = CFG.RTP_TOP_Y;
+
+    // Coarse pass, then refine, so a scan costs a few dozen reads instead of
+    // one per block of world height.
+    while (y > CFG.RTP_MIN_Y && !blockIsSolid(x, y, z)) y -= 4;
+    if (y <= CFG.RTP_MIN_Y) return null;
+
+    // The coarse step may have landed up to three blocks low, so climb while
+    // the block above is still solid.
+    while (y < CFG.RTP_TOP_Y && blockIsSolid(x, y + 1, z)) y += 1;
+
+    for (let tries = 0; tries < 6; tries++) {
+        if (!blockIsSolid(x, y + 1, z) && !blockIsSolid(x, y + 2, z)) return y + 1;
+        y -= 1;
+    }
+
+    return null;
+}
+
+function randomSurfaceSpot() {
+    for (let tries = 0; tries < CFG.RTP_TRIES; tries++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = CFG.RTP_MIN_DIST + Math.random() * (CFG.RTP_RADIUS - CFG.RTP_MIN_DIST);
+        const x = Math.round(CFG.RTP_CENTRE[0] + Math.cos(angle) * dist);
+        const z = Math.round(CFG.RTP_CENTRE[1] + Math.sin(angle) * dist);
+        const y = findSurface(x, z);
+
+        if (y !== null) return [x, y, z];
+    }
+
+    return null;
+}
+
+function rtpPlayer(playerId, now) {
+    const spot = randomSurfaceSpot();
+
+    if (!spot) {
+        say(playerId, "The portal fizzles: no ground out there.", "#ff5555");
+        return false;
+    }
+
+    try {
+        api.setPosition(playerId, spot[0] + 0.5, spot[1] + 0.2, spot[2] + 0.5);
+    } catch (e) {
+        noteError("portal rtp", e);
+        say(playerId, "The portal fizzles.", "#ff5555");
+        return false;
+    }
+
+    // Stops a portal at the landing spot from firing straight away.
+    const rt = RT[playerId] || (RT[playerId] = {});
+    rt.portalUntil = (now || Date.now()) + CFG.PORTAL_COOLDOWN_MS;
+
+    say(playerId, "The void spits you out at " + spot[0] + ", " + spot[1] + ", " + spot[2] + ".", "#b98cff");
+    return true;
+}
+
+let portalAcc = 0;
+
+function checkPortals(dt, now) {
+    portalAcc += dt;
+    if (portalAcc < CFG.PORTAL_CHECK_MS) return;
+
+    portalAcc = 0;
+
+    const stamp = now || Date.now();
+
+    for (const id in P) {
+        const rt = RT[id] || (RT[id] = {});
+        if (rt.portalUntil && stamp < rt.portalUntil) continue;
+        if (!portalAtPlayer(id)) continue;
+
+        rtpPlayer(id, stamp);
     }
 }
 
@@ -3800,6 +3934,8 @@ tick = function (ms) {
         boardAcc = 0;
         boardTick();
     }
+
+    checkPortals(dt);
 
     // Keep the givers pointed at the square even if a client resets them.
     if (Date.now() - lastGiverAimAt > 30000) {
