@@ -89,7 +89,8 @@
 //    /event add|remove|clearideas
 //    /updates add|remove
 //
-//  B MENU BUTTONS: Home 1-5 and Lobby spawn (everyone), Staff menu (N) and Flight (F).
+//  B MENU BUTTON (everyone): Homes (H) opens the Homes tab - name, delete,
+//  teleport and the lobby spawn. Slot 1 is free, slots 2-5 cost 1,000 each.
 //
 //  HOTKEYS for staff: N = staff menu, F = fly.
 // ============================================================
@@ -496,6 +497,12 @@ function normalize(old) {
             };
         }
     }
+
+    // Homes were never copied here, so every reload silently threw them away.
+    // They are repaired by ensureHomes, which is stricter than trusting the
+    // saved shape field by field.
+    d.homeSlots = old.homeSlots;
+    d.homes = old.homes;
 
     return d;
 }
@@ -1522,56 +1529,19 @@ const HOME_SLOTS = 5;
 const HOME_COST = 1000;
 const LOBBY_SPAWN = [10000, -9999, 10000];
 
-const HOME_ICONS = {
-    set: "house",
-    empty: "circle-plus",
-    locked: "lock",
-    lobby: "flag",
+const HOMES_SHOP = { key: "vb_homes", title: "Homes", sort: 96 };
+const HOME_NAME_MAX = 20;
+
+// Shop tiles take item names, not icon names, so these are real Bloxd items.
+const HOME_IMAGE = {
+    set: "Gold Clock",
+    empty: "Wood Clock",
+    locked: "Diamond",
+    delete: "Lava Bucket",
+    lobby: "Compass",
 };
 
-// Custom buttons must carry a keycode, and no two buttons may share one, so
-// each slot gets its own letter away from the staff N and F keys.
-const HOME_KEYS = ["KeyH", "KeyJ", "KeyK", "KeyL", "KeyU"];
-const LOBBY_KEY = "KeyY";
-
-// The utilities menu holds one button per home slot, so its icon and text
-// have to reflect that player's state every time the menu is drawn.
-function homeButtonIcon(d, index) {
-    if (index + 1 > d.homeSlots) return HOME_ICONS.locked;
-    return d.homes[index] ? HOME_ICONS.set : HOME_ICONS.empty;
-}
-
-function homeButtonText(d, index) {
-    const n = index + 1;
-
-    if (n > d.homeSlots) return "Home " + n + " - locked, " + fmtNum(HOME_COST) + " " + CFG.CURRENCY_NAME;
-
-    const spot = d.homes[index];
-    if (!spot) return "Home " + n + " - tap to set it here";
-
-    return "Home " + n + " - " + Math.round(spot.x) + ", " + Math.round(spot.y) + ", " + Math.round(spot.z);
-}
-
-// One action per press: a locked slot buys, an empty slot sets, a set slot
-// teleports. The button text already says which one it will do.
-function useHomeSlot(playerId, slot) {
-    const d = ensure(playerId);
-
-    if (!(slot >= 1 && slot <= HOME_SLOTS)) return;
-
-    if (slot > d.homeSlots) {
-        unlockHome(playerId, slot);
-        return;
-    }
-
-    if (!d.homes[slot - 1]) {
-        setHome(playerId, slot);
-        return;
-    }
-
-    useHome(playerId, slot);
-}
-
+let homesShopReady = false;
 
 // Old saves have no homes at all, so the array is rebuilt rather than
 // trusted: a broken slot must never cost a player a teleport.
@@ -1589,7 +1559,8 @@ function ensureHomes(d) {
     for (let i = 0; i < HOME_SLOTS; i++) {
         const h = old[i];
         const ok = h && typeof h === "object" && isFinite(Number(h.x)) && isFinite(Number(h.y)) && isFinite(Number(h.z));
-        homes.push(ok ? { x: Number(h.x), y: Number(h.y), z: Number(h.z) } : null);
+        const name = ok && typeof h.name === "string" ? cleanHomeName(h.name) : "";
+        homes.push(ok ? { x: Number(h.x), y: Number(h.y), z: Number(h.z), name: name } : null);
     }
 
     d.homes = homes;
@@ -1641,7 +1612,8 @@ function setHome(playerId, raw) {
         return false;
     }
 
-    d.homes[slot - 1] = spot;
+    const old = d.homes[slot - 1];
+    d.homes[slot - 1] = { x: spot.x, y: spot.y, z: spot.z, name: old && old.name ? old.name : "" };
     saveNow(playerId);
     syncClientButtons(playerId);
 
@@ -1672,7 +1644,7 @@ function useHome(playerId, raw) {
 
     if (!teleportTo(playerId, home.x, home.y, home.z)) return false;
 
-    say(playerId, "Home " + slot + ".", "#55ff55");
+    say(playerId, homeLabel(d, slot - 1) + ".", "#55ff55");
     return true;
 }
 
@@ -1714,10 +1686,10 @@ function cmdHomes(playerId) {
 
         if (n > d.homeSlots) say(playerId, "  " + n + ": locked - " + fmtNum(HOME_COST) + " " + CFG.CURRENCY_NAME, "#5a5a5a");
         else if (!home) say(playerId, "  " + n + ": empty - /sethome " + n, "#8a8a8a");
-        else say(playerId, "  " + n + ": " + Math.round(home.x) + ", " + Math.round(home.y) + ", " + Math.round(home.z), "#55ff55");
+        else say(playerId, "  " + n + ": " + homeLabel(d, i) + " - " + Math.round(home.x) + ", " + Math.round(home.y) + ", " + Math.round(home.z), "#55ff55");
     }
 
-    say(playerId, "/home <n> teleports, /sethome <n> moves one. All of them are buttons in the B menu.", "#5a5a5a");
+    say(playerId, "/home <n> teleports, /sethome <n> moves one. Name or delete them in the B menu's Homes tab.", "#5a5a5a");
 }
 
 function cmdLobby(playerId) {
@@ -1734,8 +1706,204 @@ function cmdLobby(playerId) {
 
 
 
-// A Utilities tile does the obvious thing for the slot it sits on: a locked
-// slot unlocks, an empty one is set here, a set one teleports.
+// Names are player text, so they are stripped of control characters and
+// capped rather than trusted.
+function cleanHomeName(raw) {
+    let text = String(raw === undefined || raw === null ? "" : raw).replace(/[\u0000-\u001f\u007f]/g, " ");
+    text = text.replace(/\s+/g, " ").trim();
+    if (text.length > HOME_NAME_MAX) text = text.slice(0, HOME_NAME_MAX).trim();
+    return text;
+}
+
+function homeLabel(d, index) {
+    const home = d.homes[index];
+    const n = index + 1;
+    if (!home) return "Home " + n;
+    return home.name ? "Home " + n + " - " + home.name : "Home " + n;
+}
+
+function renameHome(playerId, slot, raw) {
+    const d = ensureHomes(ensure(playerId));
+    const home = d.homes[slot - 1];
+
+    if (!home) {
+        say(playerId, "Home " + slot + " is empty - set it before naming it.", "#ff5555");
+        return false;
+    }
+
+    const name = cleanHomeName(raw);
+
+    if (!name) {
+        say(playerId, "Type a name next to the home first.", "#ff5555");
+        return false;
+    }
+
+    home.name = name;
+    saveNow(playerId);
+
+    say(playerId, "Home " + slot + " is now called \"" + name + "\".", "#55ff55");
+    return true;
+}
+
+function deleteHome(playerId, raw) {
+    const d = ensureHomes(ensure(playerId));
+    const slot = homeSlotArg(raw);
+
+    if (!slot) {
+        say(playerId, "Type which home to delete: 1-" + HOME_SLOTS + ".", "#ff5555");
+        return false;
+    }
+
+    if (!d.homes[slot - 1]) {
+        say(playerId, "Home " + slot + " is already empty.", "#ff5555");
+        return false;
+    }
+
+    d.homes[slot - 1] = null;
+    saveNow(playerId);
+
+    say(playerId, "Home " + slot + " deleted. The slot stays unlocked - press it to set a new spot.", "#55ff55");
+    return true;
+}
+
+// A slot tile reads its own state: locked ones sell the slot, empty ones take
+// the spot you are standing on, set ones teleport. Any typing in the box is a
+// name, and a name on a set home renames it without moving you.
+function homeSlotTile(d, index) {
+    const n = index + 1;
+    const locked = n > d.homeSlots;
+    const home = d.homes[index];
+
+    const title = locked ? "Home " + n + " - locked" : homeLabel(d, index);
+    const lines = [];
+
+    if (locked) {
+        lines.push({ str: "Unlock for " + fmtNum(HOME_COST) + " " + CFG.CURRENCY_NAME, style: styleFor("#ffd75e") });
+    } else if (!home) {
+        lines.push({ str: "Empty - press to set it here", style: styleFor("#8fd0ff") });
+    } else {
+        lines.push({ str: Math.round(home.x) + ", " + Math.round(home.y) + ", " + Math.round(home.z), style: styleFor("#8fd0ff") });
+    }
+
+    lines.push({ str: "\nType a name in the box to name it.", style: styleFor("#5a5a5a") });
+
+    const item = shopTile(locked ? HOME_IMAGE.locked : home ? HOME_IMAGE.set : HOME_IMAGE.empty, title, lines, false, 100 - n);
+
+    item.imageColour = colourName(locked ? "#8a8a8a" : home ? "#55ff55" : "#8fd0ff");
+    item.buyButtonText = {
+        str: locked ? "Buy " + fmtNum(HOME_COST) : home ? "Teleport" : "Set here",
+        style: styleFor(locked ? "#ffd75e" : home ? "#55ff55" : "#8fd0ff"),
+    };
+    item.userInput = { type: "text", placeholderText: "Home name" };
+
+    return item;
+}
+
+function homeDeleteTile() {
+    const item = shopTile(HOME_IMAGE.delete, "Delete a home", [
+        { str: "Type the home number in the box, then press Delete.", style: styleFor("#ff8888") },
+        { str: "\nThe slot stays unlocked, the spot is cleared.", style: styleFor("#5a5a5a") },
+    ], false, 90);
+
+    item.imageColour = colourName("#ff5555");
+    item.buyButtonText = { str: "Delete", style: styleFor("#ff5555") };
+    item.userInput = { type: "number", placeholderText: "Home number" };
+
+    return item;
+}
+
+function homeLobbyTile() {
+    const item = shopTile(HOME_IMAGE.lobby, "Lobby Spawn", [
+        { str: "Back to the lobby", style: styleFor("#8fd0ff") },
+        { str: "\n" + LOBBY_SPAWN[0] + ", " + LOBBY_SPAWN[1] + ", " + LOBBY_SPAWN[2], style: styleFor("#5a5a5a") },
+    ], false, 95);
+
+    item.imageColour = colourName("#ffcc00");
+    item.buyButtonText = { str: "Teleport", style: styleFor("#ffcc00") };
+
+    return item;
+}
+
+function renderHomesMenu(playerId) {
+    const d = ensureHomes(ensure(playerId));
+
+    for (let i = 0; i < HOME_SLOTS; i++) {
+        putShopItem(playerId, HOMES_SHOP.key, "vb_home_" + (i + 1), homeSlotTile(d, i));
+    }
+
+    putShopItem(playerId, HOMES_SHOP.key, "vb_home_delete", homeDeleteTile());
+    putShopItem(playerId, HOMES_SHOP.key, "vb_home_lobby", homeLobbyTile());
+}
+
+function setupHomesShop() {
+    try {
+        api.configureShopCategory(HOMES_SHOP.key, {
+            customTitle: HOMES_SHOP.title,
+            description: "Your homes, their names, and the lobby spawn.",
+            sortPriority: HOMES_SHOP.sort,
+        });
+    } catch (e) {
+        noteError("homes category", e);
+    }
+
+    if (homesShopReady) return;
+    homesShopReady = true;
+
+    for (let i = 0; i < HOME_SLOTS; i++) baseShopItem(HOMES_SHOP.key, "vb_home_" + (i + 1), HOME_IMAGE.locked);
+    baseShopItem(HOMES_SHOP.key, "vb_home_delete", HOME_IMAGE.delete);
+    baseShopItem(HOMES_SHOP.key, "vb_home_lobby", HOME_IMAGE.lobby);
+}
+
+function openHomesMenu(playerId) {
+    setupHomesShop();
+    renderHomesMenu(playerId);
+
+    try {
+        api.openShop(playerId, false, HOMES_SHOP.key, false);
+    } catch (e) {
+        noteError("homes menu open", e);
+        say(playerId, "The homes menu would not open - /homes still works.", "#ff5555");
+        cmdHomes(playerId);
+    }
+}
+
+function handleHomesBuy(playerId, itemKey, userInput) {
+    const d = ensureHomes(ensure(playerId));
+    const typed = cleanHomeName(userInput);
+
+    if (itemKey === "vb_home_lobby") {
+        cmdLobby(playerId);
+        return;
+    }
+
+    if (itemKey === "vb_home_delete") {
+        deleteHome(playerId, userInput);
+        renderHomesMenu(playerId);
+        return;
+    }
+
+    const slot = homeSlotArg(String(itemKey).replace("vb_home_", ""));
+
+    if (!slot) return;
+
+    if (slot > d.homeSlots) {
+        unlockHome(playerId, slot);
+        renderHomesMenu(playerId);
+        return;
+    }
+
+    const home = d.homes[slot - 1];
+
+    if (!home) {
+        if (setHome(playerId, slot) && typed) renameHome(playerId, slot, typed);
+    } else if (typed) {
+        renameHome(playerId, slot, typed);
+    } else {
+        useHome(playerId, slot);
+    }
+
+    renderHomesMenu(playerId);
+}
 
 // ---------------- COMMANDS ----------------
 
@@ -2240,28 +2408,12 @@ function targetOrComplain(playerId, name) {
     return target;
 }
 
-// The buttons in the B menu, which is where Bloxd keeps its utilities. Every
-// player gets a button per home slot plus the lobby spawn; staff buttons are
-// added on top of those, never instead of them.
+// The one button every player gets in the B menu. Everything else about
+// homes lives in the tab it opens, so only one key is ever taken.
 function menuButtonsFor(playerId) {
-    const d = ensure(playerId);
-    const buttons = [];
-
-    for (let i = 0; i < HOME_SLOTS; i++) {
-        buttons.push({
-            id: "vb_home_" + (i + 1),
-            icon: homeButtonIcon(d, i),
-            keycode: HOME_KEYS[i],
-            description: homeButtonText(d, i),
-        });
-    }
-
-    buttons.push({
-        id: "vb_spawn",
-        icon: HOME_ICONS.lobby,
-        keycode: LOBBY_KEY,
-        description: "Lobby spawn - teleport to the lobby",
-    });
+    const buttons = [
+        { id: "vb_homes", icon: "house", keycode: "KeyH", description: "Homes - name, delete, teleport" },
+    ];
 
     if (rankLevel(playerId) < 1) return buttons;
 
@@ -4484,14 +4636,8 @@ onPlayerChat = function (playerId, chatMessage, channelName) {
 };
 
 onPlayerPressedButton = function (playerId, buttonId) {
-    if (buttonId.indexOf("vb_home_") === 0) {
-        useHomeSlot(playerId, parseInt(buttonId.slice(8), 10));
-        syncClientButtons(playerId);
-        return;
-    }
-
-    if (buttonId === "vb_spawn") {
-        cmdLobby(playerId);
+    if (buttonId === "vb_homes") {
+        openHomesMenu(playerId);
         return;
     }
 
@@ -4510,6 +4656,11 @@ onPlayerPressedButton = function (playerId, buttonId) {
 // Every staff tile is a zero cost shop item, so buying one is the same
 // as clicking it.
 onPlayerBoughtShopItem = function (playerId, categoryKey, itemKey, item, userInput) {
+    if (String(categoryKey) === HOMES_SHOP.key) {
+        handleHomesBuy(playerId, itemKey, userInput);
+        return;
+    }
+
     if (!categoryKey) return;
 
     if (String(categoryKey) === CRATE_SHOP.key) {
@@ -5245,6 +5396,7 @@ loadLists();
 loadStaff();
 pruneStaff();
 setupStaffShop();
+setupHomesShop();
 
 try {
     loadGiverYaw();
