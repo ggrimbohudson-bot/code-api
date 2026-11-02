@@ -101,6 +101,9 @@ const CFG = {
     // spot. Distances are measured from RTP_CENTRE as [x, z].
     PORTAL_CHECK_MS: 400,
     PORTAL_COOLDOWN_MS: 4000,
+    // Black portals always drop you at the same place instead of rolling a
+    // random surface spot.
+    BLACK_PORTAL_DEST: [50000.5, 60001, 49999.5],
     RTP_CENTRE: [0, 0],
     RTP_MIN_DIST: 80,
     RTP_RADIUS: 500,
@@ -2081,6 +2084,34 @@ function rtpPlayer(playerId, now) {
     return true;
 }
 
+function isBlackPortal(name) {
+    const text = String(name || "").toLowerCase();
+
+    return text.indexOf("portal") !== -1 && text.indexOf("black") !== -1;
+}
+
+function blackPortalPlayer(playerId, now) {
+    const dest = CFG.BLACK_PORTAL_DEST;
+
+    try {
+        api.setPosition(playerId, dest[0], dest[1], dest[2]);
+    } catch (e) {
+        noteError("black portal", e);
+        say(playerId, "The black portal fizzles.", "#ff5555");
+        return false;
+    }
+
+    // Same cooldown as the surface trip, so a portal at either end cannot
+    // bounce the player straight back.
+    const rt = RT[playerId] || (RT[playerId] = {});
+    rt.portalUntil = (now || Date.now()) + CFG.PORTAL_COOLDOWN_MS;
+    rt.portalCell = null;
+    rt.portalSeen = false;
+
+    say(playerId, "The black portal drags you to " + dest[0] + ", " + dest[1] + ", " + dest[2] + ".", "#b98cff");
+    return true;
+}
+
 let portalAcc = 0;
 
 function checkPortals(dt, now) {
@@ -2094,9 +2125,11 @@ function checkPortals(dt, now) {
     for (const id in P) {
         const rt = RT[id] || (RT[id] = {});
         if (rt.portalUntil && stamp < rt.portalUntil) continue;
-        if (!portalAtPlayer(id)) continue;
+        const hit = portalAtPlayer(id);
 
-        rtpPlayer(id, stamp);
+        if (!hit) continue;
+        if (isBlackPortal(hit)) blackPortalPlayer(id, stamp);
+        else rtpPlayer(id, stamp);
     }
 }
 
@@ -2127,6 +2160,11 @@ function cmdPortal(playerId) {
     const rt = RT[playerId] || {};
 
     say(playerId, "  nearby portal: " + (near || "none"), near ? "#55ff55" : "#8a8a8a");
+    if (isBlackPortal(near)) {
+        const dest = CFG.BLACK_PORTAL_DEST;
+
+        say(playerId, "  black portal -> " + dest[0] + ", " + dest[1] + ", " + dest[2], "#55ff55");
+    }
     say(playerId, "  ground here: " + (surface === null ? "none found" : surface), "#8a8a8a");
     say(playerId, "  apis: getBlock " + (typeof api.getBlock) + ", solidity " + (typeof api.getBlockSolidity), "#8a8a8a");
     say(playerId, "  cooldown: " + (rt.portalUntil && rt.portalUntil > Date.now() ? Math.ceil((rt.portalUntil - Date.now()) / 1000) + "s" : "ready"), "#8a8a8a");
