@@ -1674,7 +1674,7 @@ function unlockHome(playerId, raw) {
     return true;
 }
 
-function cmdHomes(playerId) {
+function cmdHomes(playerId, openMenu) {
     const d = ensureHomes(ensure(playerId));
 
     say(playerId, "== HOMES ==", "#ffcc00");
@@ -1690,6 +1690,9 @@ function cmdHomes(playerId) {
     }
 
     say(playerId, "/home <n> teleports, /sethome <n> moves one. Name or delete them in the B menu's Homes tab.", "#5a5a5a");
+
+    // Opening from chat means the tab is reachable even with no button.
+    if (openMenu !== false) openHomesMenu(playerId);
 }
 
 function cmdLobby(playerId) {
@@ -1862,8 +1865,8 @@ function openHomesMenu(playerId) {
         api.openShop(playerId, false, HOMES_SHOP.key, false);
     } catch (e) {
         noteError("homes menu open", e);
-        say(playerId, "The homes menu would not open - /homes still works.", "#ff5555");
-        cmdHomes(playerId);
+        say(playerId, "The homes menu would not open - the list is below.", "#ff5555");
+        cmdHomes(playerId, false);
     }
 }
 
@@ -2434,14 +2437,25 @@ function syncClientButtons(playerId) {
     try {
         api.setClientOption(playerId, "customButtons", buttons);
         buttonWarned.delete(playerId);
+        return;
     } catch (e) {
         noteError("client buttons", e);
+    }
 
-        // Two places sync the buttons on join, so tell the player once.
-        if (!buttonWarned.has(playerId)) {
-            buttonWarned.add(playerId);
-            say(playerId, "The B menu buttons would not load - /home, /sethome and /spawn still work.", "#ff5555");
-        }
+    // Some builds only accept the batched object form, so try that before
+    // telling the player the shortcut is gone.
+    try {
+        api.setClientOptions(playerId, { customButtons: buttons });
+        buttonWarned.delete(playerId);
+        return;
+    } catch (e) {
+        noteError("client buttons object", e);
+    }
+
+    // Two places sync on join, so tell the player once.
+    if (!buttonWarned.has(playerId)) {
+        buttonWarned.add(playerId);
+        say(playerId, "The B menu button would not load - open B and pick the Homes tab, or use /homes.", "#ff5555");
     }
 }
 
@@ -4576,6 +4590,16 @@ onPlayerJoin = function (playerId) {
     // Build the B-menu tiles this rank can use, then the utilities tab
     // every player has whatever their rank.
     renderStaffMenu(playerId);
+
+    // The Homes tab is filled in on join, not just when the shortcut is
+    // pressed, so it still works for a client that never shows the button.
+    try {
+        setupHomesShop();
+        renderHomesMenu(playerId);
+    } catch (e) {
+        noteError("homes menu", e);
+    }
+
     syncClientButtons(playerId);
 
     const mute = STAFF.mutes[key];
