@@ -1523,11 +1523,16 @@ const HOME_COST = 1000;
 const LOBBY_SPAWN = [10000, -9999, 10000];
 
 const HOME_ICONS = {
-    set: "home",
-    empty: "clock",
+    set: "house",
+    empty: "circle-plus",
     locked: "lock",
-    lobby: "compass",
+    lobby: "flag",
 };
+
+// Custom buttons must carry a keycode, and no two buttons may share one, so
+// each slot gets its own letter away from the staff N and F keys.
+const HOME_KEYS = ["KeyH", "KeyJ", "KeyK", "KeyL", "KeyU"];
+const LOBBY_KEY = "KeyY";
 
 // The utilities menu holds one button per home slot, so its icon and text
 // have to reflect that player's state every time the menu is drawn.
@@ -2246,25 +2251,46 @@ function menuButtonsFor(playerId) {
         buttons.push({
             id: "vb_home_" + (i + 1),
             icon: homeButtonIcon(d, i),
+            keycode: HOME_KEYS[i],
             description: homeButtonText(d, i),
         });
     }
 
-    buttons.push({ id: "vb_spawn", icon: HOME_ICONS.lobby, description: "Lobby spawn - teleport to the lobby" });
+    buttons.push({
+        id: "vb_spawn",
+        icon: HOME_ICONS.lobby,
+        keycode: LOBBY_KEY,
+        description: "Lobby spawn - teleport to the lobby",
+    });
 
     if (rankLevel(playerId) < 1) return buttons;
 
-    buttons.push({ id: "vb_panel", icon: "gear", keycode: "KeyN", description: "Staff menu (B)" });
+    buttons.push({ id: "vb_panel", icon: "bars", keycode: "KeyN", description: "Staff menu (B)" });
 
     if (hasPerm(playerId, "fly")) {
-        buttons.push({ id: "vb_fly", icon: "feather", keycode: "KeyF", description: "Toggle flight" });
+        buttons.push({ id: "vb_fly", icon: "arrow-up", keycode: "KeyF", description: "Toggle flight" });
     }
 
     return buttons;
 }
 
+const buttonWarned = new Set();
+
 function syncClientButtons(playerId) {
-    try { api.setClientOption(playerId, "customButtons", menuButtonsFor(playerId)); } catch (e) { }
+    const buttons = menuButtonsFor(playerId);
+
+    try {
+        api.setClientOption(playerId, "customButtons", buttons);
+        buttonWarned.delete(playerId);
+    } catch (e) {
+        noteError("client buttons", e);
+
+        // Two places sync the buttons on join, so tell the player once.
+        if (!buttonWarned.has(playerId)) {
+            buttonWarned.add(playerId);
+            say(playerId, "The B menu buttons would not load - /home, /sethome and /spawn still work.", "#ff5555");
+        }
+    }
 }
 
 // ----- flight / movement -----
