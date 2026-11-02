@@ -10,7 +10,7 @@ XP_FISH: 4,
 XP_MINUTE: 2,
 CURRENCY_COLOUR: "blue",
 SAVE_EVERY_MS: 60000,
-PANEL_LIMIT: 1900,
+PANEL_LIMIT: 2600,
 BOARD_EVERY_MS: 4000,
 PORTAL_CHECK_MS: 400,
 PORTAL_COOLDOWN_MS: 4000,
@@ -533,8 +533,6 @@ rewards: {},
 },
 quests: {},
 skills: {},
-homeSlots: 1,
-homes: [null, null, null, null, null],
 };
 }
 function num(v) {
@@ -596,8 +594,6 @@ since: num(quest.since),
 };
 }
 }
-d.homeSlots = old.homeSlots;
-d.homes = old.homes;
 return d;
 }
 function loadData(playerId) {
@@ -622,7 +618,6 @@ lastQuestAt: 0,
 pending: null,
 };
 }
-ensureHomes(P[playerId]);
 return P[playerId];
 }
 const LAST_ERRORS = [];
@@ -1151,6 +1146,9 @@ out.push(part);
 }
 return out;
 }
+function panelRule() {
+return segText("----------------", "#3f3f3f");
+}
 function rightInfoText(playerId) {
 const d = P[playerId];
 if (!d) return "";
@@ -1158,10 +1156,15 @@ const r = rankInfo(playerId);
 const shown = nameOf(playerId);
 const nameColour = r.level > 0 ? r.colour : "#ffffff";
 const out = [];
-out.push(segText(gameTitle(), "#ffcc00"));
+out.push(segIcon("fa-solid fa-diamond", "#ffcc00"));
+out.push(segText(" " + gameTitle(), "#ffcc00"));
+out.push(segIcon("fa-solid fa-diamond", "#ffcc00"));
 out.push(segText("\n"));
-out.push(segIcon(r.icon, r.level > 0 ? r.colour : "#b0b0b0"));
+out.push(segIcon(r.icon, nameColour));
 out.push(segText(" " + shown, nameColour));
+if (r.tag && r.level > 0) out.push(segText("  " + r.tag, r.colour));
+out.push(segText("\n"));
+out.push(panelRule());
 out.push(segText("\n"));
 out.push(segIcon("fa-solid fa-coins", "#ffd75e"));
 out.push(segText(" " + fmtNum(d.shards), "#ffd75e"));
@@ -1173,33 +1176,37 @@ out.push(segIcon("fa-solid fa-clock-rotate-left", "#8fd0ff"));
 out.push(segText(" " + fmtShortTime(d.stats.playtimeMs), "#8fd0ff"));
 out.push(segText("   ", "#8a8a8a"));
 out.push(segIcon("fa-solid fa-swords", "#ff9a9a"));
-out.push(segText(" " + d.stats.kills + " K  " + d.stats.deaths + " D", "#ff9a9a"));
-const levelLine = ["Overall Lv" + levelFor(d.stats.xp) + " " + levelPercent(d.stats.xp) + "%"];
+out.push(segText(" " + d.stats.kills + "K " + d.stats.deaths + "D", "#ff9a9a"));
+out.push(segText("\n"));
+out.push(segIcon("fa-solid fa-gem", "#b48cff"));
+out.push(segText(" LV" + levelFor(d.stats.xp) + " " + levelPercent(d.stats.xp) + "%", "#b48cff"));
+let skillLine = "";
 for (const key in QUEST_TYPES) {
-const xp = skillOf(playerId, key).xp;
-levelLine.push(QUEST_TYPES[key].short + " Lv" + levelFor(xp) + " " + levelPercent(xp) + "%");
+skillLine += QUEST_TYPES[key].short + " Lv" + levelFor(skillOf(playerId, key).xp) + "  ";
 }
-out.push(segText("\n" + levelLine.join("  |  "), "#c9a6ff"));
-out.push(segText("\n QUESTS ", "#ffcc00"));
+out.push(segText("   " + skillLine.trim(), "#c9a6ff"));
+out.push(segText("\n"));
+out.push(panelRule());
+out.push(segText("\nQUESTS", "#ffcc00"));
 for (const key in QUEST_TYPES) {
 const giver = QUEST_TYPES[key];
 const quest = d.quests[key];
 if (!quest) {
-out.push(segText("\n" + giver.short + ": see " + giver.title, "#5a5a5a"));
+out.push(segText("\n" + giver.short + ": talk to " + giver.title, "#5a5a5a"));
 continue;
 }
 const ready = quest.have >= quest.need;
-out.push(segText("\n" + giver.short + " T" + (quest.tier || 1) + " " + quest.have + "/" + quest.need + " " + giver.unit + (ready ? "  CLAIM" : ""), ready ? "#55ff55" : giver.colour));
+out.push(segText("\n" + giver.short + " T" + (quest.tier || 1) + "  " + quest.have + "/" + quest.need + (ready ? "  CLAIM" : ""), ready ? "#55ff55" : giver.colour));
 }
 if (LISTS.events.items.length) {
-const event = LISTS.events.items[LISTS.events.items.length - 1];
 out.push(segText("\n"));
 out.push(segIcon("fa-solid fa-flag", "#ffaa55"));
-out.push(segText(" " + event.text.slice(0, 30), "#ffaa55"));
+out.push(segText(" " + LISTS.events.items[LISTS.events.items.length - 1].text.slice(0, 24), "#ffaa55"));
 }
 out.push(segText("\n"));
 out.push(segIcon("fa-solid fa-user-group", "#8fd0ff"));
 out.push(segText(" " + DISCORD_LINK.replace("https://", ""), "#8fd0ff"));
+out.push(segText("\nDo /cmd for commands", "#55ffff"));
 return compactSegments(out);
 }
 function rightInfoPlain(playerId) {
@@ -1207,16 +1214,20 @@ const d = P[playerId];
 if (!d) return "";
 const r = rankInfo(playerId);
 const lines = [
-gameTitle(),
+">> " + gameTitle() + " <<",
 (r.tag ? "[" + r.tag + "] " : "") + nameOf(playerId),
+"------------------------------",
 fmtNum(d.shards) + " shards   #" + placeOf(playerId, "kills") + " kills",
 fmtShortTime(d.stats.playtimeMs) + "   " + d.stats.kills + " K  " + d.stats.deaths + " D",
+"------------------------------",
+"Overall Lv" + levelFor(d.stats.xp) + " " + levelPercent(d.stats.xp) + "% " + levelBar(d.stats.xp),
 ];
-lines.push("Overall Lv" + levelFor(d.stats.xp) + " " + levelPercent(d.stats.xp) + "% " + levelBar(d.stats.xp));
 for (const key in QUEST_TYPES) {
 const xp = skillOf(playerId, key).xp;
 lines.push(QUEST_TYPES[key].short + " Lv" + levelFor(xp) + " " + levelPercent(xp) + "% " + levelBar(xp));
 }
+lines.push("------------------------------");
+lines.push("QUESTS");
 for (const key in QUEST_TYPES) {
 const quest = d.quests[key];
 if (!quest) continue;
@@ -1226,6 +1237,7 @@ if (LISTS.events.items.length) {
 lines.push("Event: " + LISTS.events.items[LISTS.events.items.length - 1].text.slice(0, 30));
 }
 lines.push(DISCORD_LINK);
+lines.push("Do /cmd for commands");
 return lines.join("\n");
 }
 const PANEL_OFF = {};
@@ -1274,27 +1286,7 @@ count++;
 }
 say(playerId, "Leaderboard refreshed for " + count + " player" + (count === 1 ? "" : "s") + ". Press G.", "#55ff55");
 }
-const HOME_SLOTS = 5;
-const HOME_COST = 1000;
 const LOBBY_SPAWN = [10000, -9999, 10000];
-const HOME_NAME_MAX = 20;
-function ensureHomes(d) {
-if (!d) return d;
-let slots = Math.floor(Number(d.homeSlots));
-if (!isFinite(slots) || slots < 1) slots = 1;
-if (slots > HOME_SLOTS) slots = HOME_SLOTS;
-d.homeSlots = slots;
-const old = Array.isArray(d.homes) ? d.homes : [];
-const homes = [];
-for (let i = 0; i < HOME_SLOTS; i++) {
-const h = old[i];
-const ok = h && typeof h === "object" && isFinite(Number(h.x)) && isFinite(Number(h.y)) && isFinite(Number(h.z));
-const name = ok && typeof h.name === "string" ? cleanHomeName(h.name) : "";
-homes.push(ok ? { x: Number(h.x), y: Number(h.y), z: Number(h.z), name: name } : null);
-}
-d.homes = homes;
-return d;
-}
 function teleportTo(playerId, x, y, z) {
 try {
 api.setPosition(playerId, Number(x), Number(y), Number(z));
@@ -1312,136 +1304,10 @@ if (!pos) return null;
 if (!isFinite(Number(pos[0])) || !isFinite(Number(pos[1])) || !isFinite(Number(pos[2]))) return null;
 return { x: Number(pos[0]), y: Number(pos[1]), z: Number(pos[2]) };
 }
-function homeSlotArg(raw) {
-const n = Math.floor(Number(raw));
-if (!isFinite(n) || n < 1 || n > HOME_SLOTS) return 0;
-return n;
-}
-function setHome(playerId, raw) {
-const d = ensureHomes(ensure(playerId));
-const slot = homeSlotArg(raw);
-if (!slot) {
-say(playerId, "Pick a home 1-" + HOME_SLOTS + ": /sethome 2", "#ff5555");
-return false;
-}
-if (slot > d.homeSlots) {
-say(playerId, "Home " + slot + " is locked. Unlock it for " + fmtNum(HOME_COST) + " " + CFG.CURRENCY_NAME + " in the utilities menu.", "#ff5555");
-return false;
-}
-const spot = hereSpot(playerId);
-if (!spot) {
-say(playerId, "Could not read your position - stand still and try again.", "#ff5555");
-return false;
-}
-const old = d.homes[slot - 1];
-d.homes[slot - 1] = { x: spot.x, y: spot.y, z: spot.z, name: old && old.name ? old.name : "" };
-saveNow(playerId);
-syncClientButtons(playerId);
-say(playerId, "Home " + slot + " set to " + Math.round(spot.x) + ", " + Math.round(spot.y) + ", " + Math.round(spot.z) + ".", "#55ff55");
-return true;
-}
-function useHome(playerId, raw) {
-const d = ensureHomes(ensure(playerId));
-const slot = homeSlotArg(raw);
-if (!slot) {
-cmdHomes(playerId);
-return false;
-}
-if (slot > d.homeSlots) {
-say(playerId, "Home " + slot + " is locked. Unlock it for " + fmtNum(HOME_COST) + " " + CFG.CURRENCY_NAME + ".", "#ff5555");
-return false;
-}
-const home = d.homes[slot - 1];
-if (!home) {
-say(playerId, "Home " + slot + " is empty. Stand where you want it and /sethome " + slot + ".", "#ff5555");
-return false;
-}
-if (!teleportTo(playerId, home.x, home.y, home.z)) return false;
-say(playerId, homeLabel(d, slot - 1) + ".", "#55ff55");
-return true;
-}
-function unlockHome(playerId, raw) {
-const d = ensureHomes(ensure(playerId));
-const slot = homeSlotArg(raw);
-if (!slot || slot <= d.homeSlots) return false;
-if (slot !== d.homeSlots + 1) {
-say(playerId, "Unlock your homes in order - home " + (d.homeSlots + 1) + " is next.", "#ff5555");
-return false;
-}
-if (d.shards < HOME_COST) {
-say(playerId, "Need " + fmtNum(HOME_COST - d.shards) + " more " + CFG.CURRENCY_NAME + " for home " + slot + ".", "#ff5555");
-return false;
-}
-if (!takeShards(playerId, HOME_COST)) return false;
-d.homeSlots = slot;
-saveNow(playerId);
-syncClientButtons(playerId);
-say(playerId, "Home " + slot + " unlocked for " + fmtNum(HOME_COST) + " " + CFG.CURRENCY_NAME + ". /sethome " + slot, "#55ff55");
-return true;
-}
-function cmdHomes(playerId) {
-const d = ensureHomes(ensure(playerId));
-say(playerId, "== HOMES ==", "#ffcc00");
-say(playerId, d.homeSlots + " of " + HOME_SLOTS + " slots unlocked.", "#8fd0ff");
-for (let i = 0; i < HOME_SLOTS; i++) {
-const n = i + 1;
-const home = d.homes[i];
-if (n > d.homeSlots) say(playerId, "  " + n + ": locked - " + fmtNum(HOME_COST) + " " + CFG.CURRENCY_NAME, "#5a5a5a");
-else if (!home) say(playerId, "  " + n + ": empty - /sethome " + n, "#8a8a8a");
-else say(playerId, "  " + n + ": " + homeLabel(d, i) + " - " + Math.round(home.x) + ", " + Math.round(home.y) + ", " + Math.round(home.z), "#55ff55");
-}
-say(playerId, "/home <n> teleports, /sethome <n> moves one.", "#5a5a5a");
-say(playerId, "/renamehome <n> <name> names one, /delhome <n> clears one without losing the slot.", "#5a5a5a");
-}
 function cmdLobby(playerId) {
 ensure(playerId);
 if (!teleportTo(playerId, LOBBY_SPAWN[0], LOBBY_SPAWN[1], LOBBY_SPAWN[2])) return;
 say(playerId, "Lobby spawn.", "#8fd0ff");
-}
-function cleanHomeName(raw) {
-let text = String(raw === undefined || raw === null ? "" : raw).replace(/[\u0000-\u001f\u007f]/g, " ");
-text = text.replace(/\s+/g, " ").trim();
-if (text.length > HOME_NAME_MAX) text = text.slice(0, HOME_NAME_MAX).trim();
-return text;
-}
-function homeLabel(d, index) {
-const home = d.homes[index];
-const n = index + 1;
-if (!home) return "Home " + n;
-return home.name ? "Home " + n + " - " + home.name : "Home " + n;
-}
-function renameHome(playerId, slot, raw) {
-const d = ensureHomes(ensure(playerId));
-const home = d.homes[slot - 1];
-if (!home) {
-say(playerId, "Home " + slot + " is empty - set it before naming it.", "#ff5555");
-return false;
-}
-const name = cleanHomeName(raw);
-if (!name) {
-say(playerId, "Type a name next to the home first.", "#ff5555");
-return false;
-}
-home.name = name;
-saveNow(playerId);
-say(playerId, "Home " + slot + " is now called \"" + name + "\".", "#55ff55");
-return true;
-}
-function deleteHome(playerId, raw) {
-const d = ensureHomes(ensure(playerId));
-const slot = homeSlotArg(raw);
-if (!slot) {
-say(playerId, "Type which home to delete: 1-" + HOME_SLOTS + ".", "#ff5555");
-return false;
-}
-if (!d.homes[slot - 1]) {
-say(playerId, "Home " + slot + " is already empty.", "#ff5555");
-return false;
-}
-d.homes[slot - 1] = null;
-saveNow(playerId);
-say(playerId, "Home " + slot + " deleted. The slot stays unlocked - press it to set a new spot.", "#55ff55");
-return true;
 }
 function cmdHelp(playerId) {
 say(playerId, "== " + gameTitle() + " ==", "#ffcc00");
@@ -1459,12 +1325,7 @@ say(playerId, "  /armour wear is gone - just wear all four pieces in game", "#8a
 say(playerId, "  /rewards - playtime rewards", "#ffffff");
 say(playerId, "  /rewards claim - take everything ready", "#ffffff");
 if (hasPerm(playerId, "clearinv")) say(playerId, "  /clearinv <player> - empty a player's inventory", "#ffffff");
-say(playerId, "HOMES", "#55aaff");
-say(playerId, "  /home [1-" + HOME_SLOTS + "] - teleport home", "#ffffff");
-say(playerId, "  /sethome [1-" + HOME_SLOTS + "] - set a home here", "#ffffff");
-say(playerId, "  /homes - your slots, what is unlocked and set", "#ffffff");
-say(playerId, "  /renamehome <n> <name> - name a home", "#ffffff");
-say(playerId, "  /delhome <n> - clear a home, keep the slot", "#ffffff");
+say(playerId, "TRAVEL", "#55aaff");
 say(playerId, "  /spawn - back to the lobby", "#ffffff");
 say(playerId, "QUESTS", "#55aaff");
 say(playerId, "  /quests - your quests and XP", "#ffffff");
@@ -2044,7 +1905,7 @@ noteError("client buttons object", e);
 }
 if (!buttonWarned.has(playerId)) {
 buttonWarned.add(playerId);
-say(playerId, "The B menu button would not load - open B and pick the Homes tab, or use /homes.", "#ff5555");
+say(playerId, "The B menu button would not load - press B again, or use /cmd.", "#ff5555");
 }
 }
 function cmdFly(playerId) {
@@ -3881,7 +3742,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-CLEAN-8";
+const BUILD = "VB-PANEL-9";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
@@ -3891,7 +3752,7 @@ if (cmd === "version" || cmd === "build") {
 say(playerId, "Voidbound world code: " + BUILD, "#8fd0ff");
 return;
 }
-if (cmd === "help" || cmd === "commands" || cmd === "cmds") {
+if (cmd === "help" || cmd === "commands" || cmd === "cmds" || cmd === "cmd" || cmd === "?") {
 say(playerId, "World code " + BUILD, "#5a5a5a");
 cmdHelp(playerId);
 return false;
@@ -3921,35 +3782,6 @@ questTalkThrottled(playerId, type);
 } else {
 say(playerId, "Usage: /quest <fishing|hunting|mining|killing>", "#ff5555");
 }
-return false;
-}
-if (cmd === "util" || cmd === "utilities" || cmd === "homesmenu") {
-cmdHomes(playerId);
-return false;
-}
-if (cmd === "home" || cmd === "homes") {
-if (cmd === "homes" || args[1] === undefined) cmdHomes(playerId);
-else useHome(playerId, args[1]);
-return false;
-}
-if (cmd === "sethome" || cmd === "setbase") {
-setHome(playerId, args[1] === undefined ? 1 : args[1]);
-return false;
-}
-if (cmd === "unlockhome" || cmd === "buyhome") {
-unlockHome(playerId, args[1] === undefined ? 0 : args[1]);
-return false;
-}
-if (cmd === "delhome" || cmd === "deletehome" || cmd === "removehome") {
-deleteHome(playerId, args[1] === undefined ? 0 : args[1]);
-return false;
-}
-if (cmd === "renamehome" || cmd === "namehome") {
-if (args[1] === undefined || args.length < 3) {
-say(playerId, "Usage: /renamehome <n> <name>", "#ff5555");
-return false;
-}
-renameHome(playerId, parseInt(args[1], 10) || 0, args.slice(2).join(" "));
 return false;
 }
 if (cmd === "armour" || cmd === "armor") {
