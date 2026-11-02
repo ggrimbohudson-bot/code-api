@@ -51,6 +51,14 @@
 //    /events ideas
 //    /updates
 //    /staff                staff roster
+//    /util                 utilities menu: homes and lobby spawn
+//    /home [1-5]           teleport to a home
+//    /sethome [1-5]        set a home where you stand
+//    /homes                slots, what is unlocked and what is set
+//    /spawn                back to the lobby at 10000, -9999, 10000
+//
+//  HOMES: five slots per player. Slot 1 is free, slots 2-5 unlock one at
+//  a time for 1,000 Void Shards each.
 //
 //  COMMANDS - trial mod and up (all also in the B menu)
 //    /admin                text staff panel
@@ -432,6 +440,8 @@ function defaultData() {
         },
         quests: {},
         skills: {},
+        homeSlots: 1,
+        homes: [null, null, null, null, null],
     };
 }
 
@@ -513,6 +523,7 @@ function ensure(playerId) {
             pending: null,
         };
     }
+    ensureHomes(P[playerId]);
     return P[playerId];
 }
 
@@ -1500,6 +1511,297 @@ function cmdBoardRefresh(playerId) {
     say(playerId, "Leaderboard refreshed for " + count + " player" + (count === 1 ? "" : "s") + ". Press G.", "#55ff55");
 }
 
+// ---------------- HOMES AND THE UTILITIES MENU ----------------
+// Five home slots per player. Slot 1 is free, slots 2-5 unlock one at a
+// time for 1,000 Void Shards. /sethome stores where you stand, /home takes
+// you back, and every slot is also a tile in the B menu's Utilities tab.
+
+const HOME_SLOTS = 5;
+const HOME_COST = 1000;
+const LOBBY_SPAWN = [10000, -9999, 10000];
+
+const HOME_ICONS = {
+    set: "Gold Clock",
+    empty: "Wood Clock",
+    locked: "Diamond",
+    lobby: "Compass",
+};
+
+const UTIL_SHOP = {
+    key: "vb_util",
+    title: "Utilities",
+    blurb: "Homes, lobby spawn and quick travel. First home free, then 1,000 each.",
+    sort: 95,
+};
+
+// Old saves have no homes at all, so the array is rebuilt rather than
+// trusted: a broken slot must never cost a player a teleport.
+function ensureHomes(d) {
+    if (!d) return d;
+
+    let slots = Math.floor(Number(d.homeSlots));
+    if (!isFinite(slots) || slots < 1) slots = 1;
+    if (slots > HOME_SLOTS) slots = HOME_SLOTS;
+    d.homeSlots = slots;
+
+    const old = Array.isArray(d.homes) ? d.homes : [];
+    const homes = [];
+
+    for (let i = 0; i < HOME_SLOTS; i++) {
+        const h = old[i];
+        const ok = h && typeof h === "object" && isFinite(Number(h.x)) && isFinite(Number(h.y)) && isFinite(Number(h.z));
+        homes.push(ok ? { x: Number(h.x), y: Number(h.y), z: Number(h.z) } : null);
+    }
+
+    d.homes = homes;
+    return d;
+}
+
+function teleportTo(playerId, x, y, z) {
+    try {
+        api.setPosition(playerId, Number(x), Number(y), Number(z));
+        return true;
+    } catch (e) {
+        noteError("teleport", e);
+        say(playerId, "Teleport failed - try again.", "#ff5555");
+        return false;
+    }
+}
+
+function hereSpot(playerId) {
+    let pos = null;
+    try { pos = api.getPosition(playerId); } catch (e) { return null; }
+    if (!pos) return null;
+    if (!isFinite(Number(pos[0])) || !isFinite(Number(pos[1])) || !isFinite(Number(pos[2]))) return null;
+    return { x: Number(pos[0]), y: Number(pos[1]), z: Number(pos[2]) };
+}
+
+function homeSlotArg(raw) {
+    const n = Math.floor(Number(raw));
+    if (!isFinite(n) || n < 1 || n > HOME_SLOTS) return 0;
+    return n;
+}
+
+function setHome(playerId, raw) {
+    const d = ensureHomes(ensure(playerId));
+    const slot = homeSlotArg(raw);
+
+    if (!slot) {
+        say(playerId, "Pick a home 1-" + HOME_SLOTS + ": /sethome 2", "#ff5555");
+        return false;
+    }
+
+    if (slot > d.homeSlots) {
+        say(playerId, "Home " + slot + " is locked. Unlock it for " + fmtNum(HOME_COST) + " " + CFG.CURRENCY_NAME + " in the utilities menu.", "#ff5555");
+        return false;
+    }
+
+    const spot = hereSpot(playerId);
+    if (!spot) {
+        say(playerId, "Could not read your position - stand still and try again.", "#ff5555");
+        return false;
+    }
+
+    d.homes[slot - 1] = spot;
+    saveNow(playerId);
+    renderUtilMenu(playerId);
+
+    say(playerId, "Home " + slot + " set to " + Math.round(spot.x) + ", " + Math.round(spot.y) + ", " + Math.round(spot.z) + ".", "#55ff55");
+    return true;
+}
+
+function useHome(playerId, raw) {
+    const d = ensureHomes(ensure(playerId));
+    const slot = homeSlotArg(raw);
+
+    if (!slot) {
+        cmdHomes(playerId);
+        return false;
+    }
+
+    if (slot > d.homeSlots) {
+        say(playerId, "Home " + slot + " is locked. Unlock it for " + fmtNum(HOME_COST) + " " + CFG.CURRENCY_NAME + ".", "#ff5555");
+        return false;
+    }
+
+    const home = d.homes[slot - 1];
+
+    if (!home) {
+        say(playerId, "Home " + slot + " is empty. Stand where you want it and /sethome " + slot + ".", "#ff5555");
+        return false;
+    }
+
+    if (!teleportTo(playerId, home.x, home.y, home.z)) return false;
+
+    say(playerId, "Home " + slot + ".", "#55ff55");
+    return true;
+}
+
+function unlockHome(playerId, raw) {
+    const d = ensureHomes(ensure(playerId));
+    const slot = homeSlotArg(raw);
+
+    if (!slot || slot <= d.homeSlots) return false;
+
+    if (slot !== d.homeSlots + 1) {
+        say(playerId, "Unlock your homes in order - home " + (d.homeSlots + 1) + " is next.", "#ff5555");
+        return false;
+    }
+
+    if (d.shards < HOME_COST) {
+        say(playerId, "Need " + fmtNum(HOME_COST - d.shards) + " more " + CFG.CURRENCY_NAME + " for home " + slot + ".", "#ff5555");
+        return false;
+    }
+
+    if (!takeShards(playerId, HOME_COST)) return false;
+
+    d.homeSlots = slot;
+    saveNow(playerId);
+    renderUtilMenu(playerId);
+
+    say(playerId, "Home " + slot + " unlocked for " + fmtNum(HOME_COST) + " " + CFG.CURRENCY_NAME + ". /sethome " + slot, "#55ff55");
+    return true;
+}
+
+function cmdHomes(playerId) {
+    const d = ensureHomes(ensure(playerId));
+
+    say(playerId, "== HOMES ==", "#ffcc00");
+    say(playerId, d.homeSlots + " of " + HOME_SLOTS + " slots unlocked.", "#8fd0ff");
+
+    for (let i = 0; i < HOME_SLOTS; i++) {
+        const n = i + 1;
+        const home = d.homes[i];
+
+        if (n > d.homeSlots) say(playerId, "  " + n + ": locked - " + fmtNum(HOME_COST) + " " + CFG.CURRENCY_NAME, "#5a5a5a");
+        else if (!home) say(playerId, "  " + n + ": empty - /sethome " + n, "#8a8a8a");
+        else say(playerId, "  " + n + ": " + Math.round(home.x) + ", " + Math.round(home.y) + ", " + Math.round(home.z), "#55ff55");
+    }
+
+    say(playerId, "/home <n> teleports, /sethome <n> moves one. /util opens the menu.", "#5a5a5a");
+}
+
+function cmdLobby(playerId) {
+    ensure(playerId);
+
+    if (!teleportTo(playerId, LOBBY_SPAWN[0], LOBBY_SPAWN[1], LOBBY_SPAWN[2])) return;
+
+    say(playerId, "Lobby spawn.", "#8fd0ff");
+}
+
+function utilTile(image, title, desc, hidden, sort, colour) {
+    const item = shopTile(image, title, desc, hidden, sort);
+    item.imageColour = colourName(colour || "#8fd0ff");
+    item.buyButtonText = { str: "Use", style: styleFor(colour || "#8fd0ff") };
+    return item;
+}
+
+function homeTile(d, index) {
+    const n = index + 1;
+    const home = d.homes[index];
+
+    if (n > d.homeSlots) {
+        return utilTile(HOME_ICONS.locked,
+            [{ icon: HOME_ICONS.locked }, { str: " Home " + n, style: styleFor("#8a8a8a") }],
+            [{ str: "Locked", style: styleFor("#8a8a8a") },
+             { str: "\nUnlock for " + fmtNum(HOME_COST) + " " + CFG.CURRENCY_NAME, style: styleFor("#ffd75e") },
+             { str: "\n" + d.homeSlots + " of " + HOME_SLOTS + " unlocked", style: styleFor("#5a5a5a") }],
+            false, 100 - n, "#8a8a8a");
+    }
+
+    if (!home) {
+        return utilTile(HOME_ICONS.empty,
+            [{ icon: HOME_ICONS.empty }, { str: " Home " + n, style: styleFor("#8fd0ff") }],
+            [{ str: "Empty", style: styleFor("#8fd0ff") },
+             { str: "\nTap to set it where you stand", style: styleFor("#e0e0e0") },
+             { str: "\nFirst slot is free", style: styleFor("#5a5a5a") }],
+            false, 100 - n, "#8fd0ff");
+    }
+
+    return utilTile(HOME_ICONS.set,
+        [{ icon: HOME_ICONS.set }, { str: " Home " + n, style: styleFor("#55ff55") }],
+        [{ str: "Tap to teleport", style: styleFor("#55ff55") },
+         { str: "\n" + Math.round(home.x) + ", " + Math.round(home.y) + ", " + Math.round(home.z), style: styleFor("#8a8a8a") },
+         { str: "\n/sethome " + n + " to move it", style: styleFor("#5a5a5a") }],
+        false, 100 - n, "#55ff55");
+}
+
+function lobbyTile() {
+    return utilTile(HOME_ICONS.lobby,
+        [{ icon: HOME_ICONS.lobby }, { str: " Lobby Spawn", style: styleFor("#ffcc00") }],
+        [{ str: "Tap to teleport to spawn", style: styleFor("#ffcc00") },
+         { str: "\n10000, -9999, 10000", style: styleFor("#8a8a8a") }],
+        false, 90, "#ffcc00");
+}
+
+function renderUtilMenu(playerId) {
+    const d = ensureHomes(ensure(playerId));
+    if (!d) return;
+
+    for (let i = 0; i < HOME_SLOTS; i++) {
+        putShopItem(playerId, UTIL_SHOP.key, "vb_home_" + (i + 1), homeTile(d, i));
+    }
+
+    putShopItem(playerId, UTIL_SHOP.key, "vb_home_lobby", lobbyTile());
+}
+
+function setupUtilShop() {
+    try {
+        api.configureShopCategory(UTIL_SHOP.key, {
+            customTitle: UTIL_SHOP.title,
+            description: UTIL_SHOP.blurb,
+            sortPriority: UTIL_SHOP.sort,
+            autoSelectCategory: false,
+        });
+    } catch (e) {
+        noteError("utilities shop", e);
+    }
+
+    for (let i = 0; i < HOME_SLOTS; i++) baseShopItem(UTIL_SHOP.key, "vb_home_" + (i + 1), HOME_ICONS.locked);
+    baseShopItem(UTIL_SHOP.key, "vb_home_lobby", HOME_ICONS.lobby);
+}
+
+function openUtilMenu(playerId) {
+    ensure(playerId);
+    setupUtilShop();
+    renderUtilMenu(playerId);
+
+    try {
+        api.openShop(playerId, false, UTIL_SHOP.key, false);
+        return;
+    } catch (e) {
+        noteError("utilities open", e);
+    }
+
+    cmdHomes(playerId);
+}
+
+// A Utilities tile does the obvious thing for the slot it sits on: a locked
+// slot unlocks, an empty one is set here, a set one teleports.
+function handleUtilShopBuy(playerId, itemKey) {
+    const d = ensureHomes(ensure(playerId));
+    if (!d) return false;
+
+    if (itemKey === "vb_home_lobby") {
+        cmdLobby(playerId);
+        renderUtilMenu(playerId);
+        return true;
+    }
+
+    const match = /^vb_home_([1-9])$/.exec(String(itemKey || ""));
+    if (!match) return false;
+
+    const slot = homeSlotArg(match[1]);
+    if (!slot) return false;
+
+    if (slot > d.homeSlots) unlockHome(playerId, slot);
+    else if (!d.homes[slot - 1]) setHome(playerId, slot);
+    else useHome(playerId, slot);
+
+    renderUtilMenu(playerId);
+    return true;
+}
+
 // ---------------- COMMANDS ----------------
 
 function cmdHelp(playerId) {
@@ -1512,6 +1814,12 @@ function cmdHelp(playerId) {
     say(playerId, "  /crates - crate list", "#ffffff");
     say(playerId, "  /crate buy <id> - buy and open a crate", "#ffffff");
     say(playerId, "  /dealer - open the crate dealer's shop", "#ffffff");
+    say(playerId, "UTILITIES", "#55aaff");
+    say(playerId, "  /util - the utilities menu (homes, lobby spawn)", "#ffffff");
+    say(playerId, "  /home [1-" + HOME_SLOTS + "] - teleport home", "#ffffff");
+    say(playerId, "  /sethome [1-" + HOME_SLOTS + "] - set a home here", "#ffffff");
+    say(playerId, "  /homes - your slots, what is unlocked and set", "#ffffff");
+    say(playerId, "  /spawn - back to the lobby", "#ffffff");
     say(playerId, "QUESTS", "#55aaff");
     say(playerId, "  /quests - your quests and XP", "#ffffff");
     say(playerId, "  /quest <fishing|hunting|mining|killing> - talk to a giver", "#ffffff");
@@ -4141,8 +4449,10 @@ onPlayerJoin = function (playerId) {
     // Right info box now carries everything the bottom-middle line did.
     try { api.setClientOption(playerId, "middleTextLower", ""); } catch (e) { }
 
-    // Build the B-menu tiles this rank can use.
+    // Build the B-menu tiles this rank can use, then the utilities tab
+    // every player has whatever their rank.
     renderStaffMenu(playerId);
+    renderUtilMenu(playerId);
 
     const mute = STAFF.mutes[key];
     if (mute && (!mute.until || mute.until > Date.now())) {
@@ -4219,6 +4529,11 @@ onPlayerPressedButton = function (playerId, buttonId) {
 onPlayerBoughtShopItem = function (playerId, categoryKey, itemKey, item, userInput) {
     if (!categoryKey) return;
 
+    if (String(categoryKey) === UTIL_SHOP.key) {
+        handleUtilShopBuy(playerId, itemKey);
+        return;
+    }
+
     if (String(categoryKey) === CRATE_SHOP.key) {
         const crate = crateByShopKey(itemKey);
         if (crate) buyCrateFromShop(playerId, crate);
@@ -4279,6 +4594,13 @@ onPlayerChangeBlock = function (playerId, x, y, z, fromBlock, toBlock) {
 onPlayerAltAction = function (playerId, x, y, z, block, targetEId) {
     if (!playerId) return;
 
+    // The dealer is a mesh, so the client can hand him to us by id. That
+    // check runs first: a click on him must never be read as a giver talk.
+    if (targetEId && crateDealerEId && targetEId === crateDealerEId) {
+        openCrateDealer(playerId);
+        return;
+    }
+
     if (targetEId) {
         for (const key in QUEST_NPCS) {
             if (QUEST_NPCS[key] === targetEId) {
@@ -4288,7 +4610,7 @@ onPlayerAltAction = function (playerId, x, y, z, block, targetEId) {
         }
     }
 
-    if (dealerNear(playerId)) {
+    if (dealerNear(playerId, x, z)) {
         openCrateDealer(playerId);
         return;
     }
@@ -4421,6 +4743,32 @@ playerCommand = function (playerId, command) {
     if (cmd === "givertag" || cmd === "tags") {
         for (const key in QUEST_TYPES) applyGiverNameTag(key);
         say(playerId, "Giver name tags refreshed.", "#55ff55");
+        return false;
+    }
+
+    if (cmd === "util" || cmd === "utilities" || cmd === "homesmenu") {
+        openUtilMenu(playerId);
+        return false;
+    }
+
+    if (cmd === "home" || cmd === "homes") {
+        if (cmd === "homes" || args[1] === undefined) cmdHomes(playerId);
+        else useHome(playerId, args[1]);
+        return false;
+    }
+
+    if (cmd === "sethome" || cmd === "setbase") {
+        setHome(playerId, args[1] === undefined ? 1 : args[1]);
+        return false;
+    }
+
+    if (cmd === "unlockhome" || cmd === "buyhome") {
+        unlockHome(playerId, args[1] === undefined ? 0 : args[1]);
+        return false;
+    }
+
+    if (cmd === "spawn" || cmd === "lobby") {
+        cmdLobby(playerId);
         return false;
     }
 
@@ -4625,6 +4973,7 @@ const CRATE_SHOP = {
 };
 
 let crateDealerEId = null;
+let crateShopReady = false;
 
 function dealerNameTag() {
     return {
@@ -4683,29 +5032,37 @@ function setupCrateDealer() {
     applyDealerNameTag();
 }
 
-function dealerNear(playerId) {
+// Standing next to the dealer counts as talking to him. If the engine
+// refuses to hand back the player's position mid-callback, the block the
+// click reported is used instead, so a right-click on him still lands.
+function dealerNear(playerId, clickedX, clickedZ) {
     let pos = null;
 
-    try { pos = api.getPosition(playerId); } catch (e) { return false; }
-    if (!pos) return false;
+    try { pos = api.getPosition(playerId); } catch (e) { pos = null; }
 
-    const dx = pos[0] - CRATE_DEALER.x;
-    const dz = pos[2] - CRATE_DEALER.z;
+    const hasPos = pos && isFinite(Number(pos[0])) && isFinite(Number(pos[2]));
+    const px = hasPos ? Number(pos[0]) : Number(clickedX);
+    const pz = hasPos ? Number(pos[2]) : Number(clickedZ);
 
-    return Math.sqrt(dx * dx + dz * dz) <= CRATE_DEALER.range;
+    if (!isFinite(px) || !isFinite(pz)) return false;
+
+    const dx = px - CRATE_DEALER.x;
+    const dz = pz - CRATE_DEALER.z;
+
+    return Math.sqrt(dx * dx + dz * dz) <= CRATE_DEALER.range + 1;
 }
 
 // What each roll pool is called on the odds board. Pools are matched by
 // identity against the crate tables, so renaming an item can never leave a
 // tile describing loot the crate no longer hands out.
 const POOL_LABELS = [
-    { pool: ARMOUR_SETS.geo, label: "Geo armour piece" },
-    { pool: ARMOUR_SETS.serpentite, label: "Serpentite armour piece" },
-    { pool: ARMOUR_SETS.astral, label: "Astral armour piece" },
-    { pool: ARMOUR_SETS.sanguine, label: "Sanguine armour piece" },
-    { pool: ARMOUR_SETS.spectral, label: "Spectral armour piece" },
+    { pool: ARMOUR_SETS.geo, label: "Geo armour" },
+    { pool: ARMOUR_SETS.serpentite, label: "Serpentite armour" },
+    { pool: ARMOUR_SETS.astral, label: "Astral armour" },
+    { pool: ARMOUR_SETS.sanguine, label: "Sanguine armour" },
+    { pool: ARMOUR_SETS.spectral, label: "Spectral armour" },
     { pool: TOOL_SETS.starter, label: "starter tools" },
-    { pool: TOOL_SETS.good, label: "diamond / moonstone tools" },
+    { pool: TOOL_SETS.good, label: "diamond tools" },
     { pool: TOOL_SETS.serpentite, label: "Serpentite tools" },
     { pool: TOOL_SETS.spectral, label: "Spectral weapon" },
     { pool: GEAR_POOLS.starter, label: "starter gear" },
@@ -4740,8 +5097,8 @@ function pctText(pct) {
 
 function enchantText(ench) {
     if (!ench) return "";
-    if (ench[0] === ench[1]) return "  enchant " + ench[0];
-    return "  enchant " + ench[0] + "-" + ench[1];
+    if (ench[0] === ench[1]) return "  ench " + ench[0];
+    return "  ench " + ench[0] + "-" + ench[1];
 }
 
 function crateRowText(entry) {
@@ -4793,10 +5150,27 @@ function crateTileDescription(crate) {
     parts.push({ str: fmtNum(crate.price) + " " + CFG.CURRENCY_NAME, style: styleFor("#ffff55") });
     parts.push({ str: "  " + crate.headline, style: styleFor(crate.colour) });
 
+    // Every outcome stays on the tile, but rows that share a rarity share
+    // one style object instead of carrying their own. A shop is a client
+    // option like the side panel, and the client drops an option that is
+    // too large, so the fewer bytes a tile spends on styling the better.
     const rows = crateOdds(crate);
+    const groups = [];
+    const byRarity = {};
+
     for (let i = 0; i < rows.length; i++) {
-        const colour = RARITY_COLOUR[rows[i].r] || "#ffffff";
-        parts.push({ str: "\n" + pctText(rows[i].pct) + "  " + rows[i].text, style: styleFor(colour) });
+        const key = rows[i].r || "common";
+
+        if (!byRarity[key]) {
+            byRarity[key] = { r: key, items: [] };
+            groups.push(byRarity[key]);
+        }
+
+        byRarity[key].items.push(pctText(rows[i].pct) + " " + rows[i].text);
+    }
+
+    for (let i = 0; i < groups.length; i++) {
+        parts.push({ str: "\n" + groups[i].items.join("  \u00b7  "), style: styleFor(RARITY_COLOUR[groups[i].r] || "#ffffff") });
     }
 
     return parts;
@@ -4830,6 +5204,11 @@ function setupCrateShop() {
     } catch (e) {
         noteError("crate shop", e);
     }
+
+    // The tiles are built once. Rebuilding nine big tiles on every
+    // right-click was pure waste inside the click callback.
+    if (crateShopReady) return;
+    crateShopReady = true;
 
     for (let i = 0; i < CRATES.length; i++) {
         const crate = CRATES[i];
@@ -4867,6 +5246,7 @@ function buyCrateFromShop(playerId, crate) {
 }
 
 function openCrateDealer(playerId) {
+    ensure(playerId);
     setupCrateShop();
 
     try {
@@ -4877,6 +5257,7 @@ function openCrateDealer(playerId) {
     }
 
     // A client that refuses the shop still gets the list and /crate buy.
+    say(playerId, "The crate menu would not open - /crates still works. /diag shows the error.", "#ff5555");
     cmdCrates(playerId);
 }
 
@@ -4886,6 +5267,12 @@ loadLists();
 loadStaff();
 pruneStaff();
 setupStaffShop();
+try {
+    setupUtilShop();
+} catch (e) {
+    noteError("utilities shop", e);
+}
+
 try {
     loadGiverYaw();
 } catch (e) {
