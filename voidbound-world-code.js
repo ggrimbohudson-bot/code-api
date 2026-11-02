@@ -104,6 +104,8 @@ const CFG = {
     // Black portals always drop you at the same place instead of rolling a
     // random surface spot.
     BLACK_PORTAL_DEST: [50000.5, 60001, 49999.5],
+    // How close a player has to stand for a giver to answer, in blocks.
+    GIVER_TALK_RANGE: 5,
     RTP_CENTRE: [0, 0],
     RTP_MIN_DIST: 80,
     RTP_RADIUS: 500,
@@ -3391,6 +3393,82 @@ function saveGiverSkins() {
     try { api.setLobbyDbValue(GIVER_SKIN_KEY, JSON.stringify(GIVER_SKINS)); } catch (e) { }
 }
 
+// Bloxd draws a mesh's plate from a per-entity setting, not from the name
+// given at creation, so each giver gets a titled plate in its own colour.
+const GIVER_TAGS = {
+    fishing: { mark: "\u2726", sub: "RIGHT-CLICK FOR A QUEST" },
+    hunting: { mark: "\u2620", sub: "RIGHT-CLICK FOR A QUEST" },
+    mining: { mark: "\u26cf", sub: "RIGHT-CLICK FOR A QUEST" },
+    killing: { mark: "\u2694", sub: "RIGHT-CLICK FOR A QUEST" },
+};
+
+const GIVER_NAME_COLOUR = {
+    fishing: "aqua",
+    hunting: "pink",
+    mining: "cyan",
+    killing: "red",
+};
+
+function giverNameTag(type) {
+    const giver = QUEST_TYPES[type];
+    const tag = GIVER_TAGS[type] || {};
+    const mark = tag.mark || "";
+    const title = String(giver.title).toUpperCase();
+    const text = mark ? mark + " " + title + " " + mark : title;
+
+    return {
+        content: [{ str: text, style: styleFor(giver.colour) }],
+        subtitle: [{ str: tag.sub || "RIGHT-CLICK FOR A QUEST", style: styleFor("#8a8a8a") }],
+        border: { colour: colourName(giver.colour), style: "glow" },
+    };
+}
+
+function applyGiverNameTag(type) {
+    const eId = QUEST_NPCS[type];
+    if (!eId) return;
+
+    try {
+        api.setTargetedPlayerSettingForEveryone(eId, "nameTagInfo", giverNameTag(type), true);
+        return;
+    } catch (e) {
+        noteError("nametag " + type, e);
+    }
+
+    // A server that refuses nameTagInfo still gets a coloured name.
+    try {
+        api.setTargetedPlayerSettingForEveryone(eId, "nameColour", GIVER_NAME_COLOUR[type] || "purple", true);
+    } catch (e) {
+        noteError("name colour " + type, e);
+    }
+}
+
+// Mesh entities do not reliably report which entity a player clicked, and a
+// giver built before the code was re-pasted has a stale id, so the closest
+// giver within reach counts as the one being talked to.
+function giverNear(playerId) {
+    let pos = null;
+
+    try { pos = api.getPosition(playerId); } catch (e) { return null; }
+    if (!pos) return null;
+
+    let best = null;
+    let bestDist = CFG.GIVER_TALK_RANGE;
+
+    for (const key in QUEST_TYPES) {
+        const giver = QUEST_TYPES[key];
+        const dx = pos[0] - giver.x;
+        const dz = pos[2] - giver.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+
+        if (dist <= bestDist) {
+            bestDist = dist;
+            best = key;
+        }
+    }
+
+    return best;
+}
+
 function createGiver(key) {
     const giver = QUEST_TYPES[key];
     const look = GIVER_LOOKS[key] || { size: 1, heads: ["trader_black"] };
@@ -3474,6 +3552,7 @@ function applyGiverSkin(type) {
         // Updating a mesh drops its rotation back to zero, which is why only
         // the givers nobody re-skinned kept facing the middle.
         applyGiverYaw(type);
+        applyGiverNameTag(type);
         return;
     } catch (e) {
         noteError("skin update " + type, e);
@@ -3634,6 +3713,7 @@ function setupQuestGivers() {
         }
 
         applyGiverYaw(key);
+        applyGiverNameTag(key);
     }
 }
 
@@ -3989,17 +4069,23 @@ onPlayerChangeBlock = function (playerId, x, y, z, fromBlock, toBlock) {
     questProgress(playerId, "mining", 1);
 };
 
-// Right-clicking a quest giver opens its quest. Mesh entities do not
-// always report a target, so /quest <type> does the same thing.
+// Right-clicking a quest giver opens its quest. Mesh entities frequently
+// report no target entity, so standing next to a giver is enough.
 onPlayerAltAction = function (playerId, x, y, z, block, targetEId) {
-    if (!playerId || !targetEId) return;
+    if (!playerId) return;
 
-    for (const key in QUEST_NPCS) {
-        if (QUEST_NPCS[key] === targetEId) {
-            questTalkThrottled(playerId, key);
-            return;
+    if (targetEId) {
+        for (const key in QUEST_NPCS) {
+            if (QUEST_NPCS[key] === targetEId) {
+                questTalkThrottled(playerId, key);
+                return;
+            }
         }
     }
+
+    const near = giverNear(playerId);
+
+    if (near) questTalkThrottled(playerId, near);
 };
 
 doPeriodicSave = function () {
@@ -4114,6 +4200,12 @@ playerCommand = function (playerId, command) {
 
     if (cmd === "giverskin" || cmd === "skin") {
         cmdGiverSkin(playerId, args);
+        return false;
+    }
+
+    if (cmd === "givertag" || cmd === "tags") {
+        for (const key in QUEST_TYPES) applyGiverNameTag(key);
+        say(playerId, "Giver name tags refreshed.", "#55ff55");
         return false;
     }
 
