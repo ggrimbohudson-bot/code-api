@@ -5142,7 +5142,7 @@ playerCommand = function (playerId, command) {
 const CRATE_DEALER = {
     name: "Crate Dealer",
     x: 50013.5,
-    y: 10001,
+    y: 60001,
     z: 49999.5,
     range: 6,
     skin: "piggy_banker",
@@ -5152,7 +5152,7 @@ const CRATE_DEALER = {
 const CRATE_SHOP = {
     key: "vb_crates",
     title: "Crates",
-    blurb: "Nine crates, full odds on every tile. Right-click the dealer at 50013, 10001, 49999.",
+    blurb: "Nine crates, full odds on every tile. Right-click the dealer at 50013, 60001, 49999.",
     sort: 70,
 };
 
