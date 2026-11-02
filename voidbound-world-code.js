@@ -5142,7 +5142,7 @@ playerCommand = function (playerId, command) {
 const CRATE_DEALER = {
     name: "Crate Dealer",
     x: 50013.5,
-    y: 60001,
+    y: 10001,
     z: 49999.5,
     range: 6,
     skin: "piggy_banker",
@@ -5152,7 +5152,7 @@ const CRATE_DEALER = {
 const CRATE_SHOP = {
     key: "vb_crates",
     title: "Crates",
-    blurb: "Nine crates, full odds on every tile. Right-click to roll.",
+    blurb: "Nine crates, full odds on every tile. Right-click the dealer at 50013, 10001, 49999.",
     sort: 70,
 };
 
@@ -5333,6 +5333,7 @@ function crateTileDescription(crate) {
 
     parts.push({ str: fmtNum(crate.price) + " " + CFG.CURRENCY_NAME, style: styleFor("#ffff55") });
     parts.push({ str: "  " + crate.headline, style: styleFor(crate.colour) });
+    parts.push({ str: "\nEvery roll below is what this crate can pay.", style: styleFor("#8a8a8a") });
 
     // Every outcome stays on the tile, but rows that share a rarity share
     // one style object instead of carrying their own. A shop is a client
@@ -5360,8 +5361,21 @@ function crateTileDescription(crate) {
     return parts;
 }
 
+// Tiles are ordered by their place in the CRATES table, so adding a crate
+// there puts it in the menu in the right spot with no second list to edit.
+function crateMenuSort(crate) {
+    let index = 0;
+
+    for (let i = 0; i < CRATES.length; i++) {
+        if (CRATES[i] === crate) index = i;
+    }
+
+    return (CRATES.length - index) * 10;
+}
+
 function crateShopTile(crate) {
     const colour = colourName(crate.colour);
+    const price = fmtNum(crate.price) + " " + CFG.CURRENCY_NAME;
 
     return {
         image: crate.icon,
@@ -5370,10 +5384,10 @@ function crateShopTile(crate) {
         currency: CFG.CURRENCY_ID,
         canBuy: true,
         hidden: false,
-        buyButtonText: { str: "Open", style: { color: colour, colour: colour } },
+        buyButtonText: { str: "Open - " + price, style: { color: colour, colour: colour } },
         customTitle: [{ icon: crate.icon }, { str: " " + crate.name, style: styleFor(crate.colour) }],
         description: crateTileDescription(crate),
-        sortPriority: 100 - crate.price / 1000,
+        sortPriority: crateMenuSort(crate),
     };
 }
 
