@@ -1344,6 +1344,7 @@ function cmdHelp(playerId) {
         say(playerId, "STAFF (" + r.name + ")", r.colour);
         say(playerId, "  Press B or N - staff menu with every tool you can use", "#ffffff");
         say(playerId, "  /admin - text version of the same panel", "#ffffff");
+        say(playerId, "  /giverturn <type> [degrees] - aim a quest giver", "#ffffff");
     }
 
     say(playerId, "Text not showing colour? Test it with /style", "#5a5a5a");
@@ -3124,6 +3125,81 @@ function createGiver(key) {
     } catch (e) { return null; }
 }
 
+// Bloxd does not document which way yaw 0 faces for a mesh, and it can be
+// off by a quarter turn from what you expect, so each giver can be nudged
+// in game with /giverturn until it looks right. The nudge is saved in the
+// lobby data, so it only has to be done once.
+const GIVER_YAW_KEY = "vb_giver_yaw_v1";
+const GIVER_YAW = {};
+
+function loadGiverYaw() {
+    let raw = null;
+    try { raw = api.getLobbyDbValue(GIVER_YAW_KEY); } catch (e) { raw = null; }
+
+    let saved = {};
+    try { saved = raw ? JSON.parse(raw) : {}; } catch (e) { saved = {}; }
+
+    for (const key in QUEST_TYPES) {
+        const value = Number(saved && saved[key]);
+        GIVER_YAW[key] = isFinite(value) ? value : 0;
+    }
+}
+
+function saveGiverYaw() {
+    try { api.setLobbyDbValue(GIVER_YAW_KEY, JSON.stringify(GIVER_YAW)); } catch (e) { }
+}
+
+function giverYaw(type) {
+    const giver = QUEST_TYPES[type];
+    const base = yawTo(giver.x, giver.z, QUEST_CENTRE[0], QUEST_CENTRE[2]);
+
+    return (base + (GIVER_YAW[type] || 0) + 360) % 360;
+}
+
+function applyGiverYaw(type) {
+    const eId = QUEST_NPCS[type];
+    if (!eId) return;
+
+    try { api.setEntityRotation(eId, 0, giverYaw(type), 0); } catch (e) { }
+}
+
+function cmdGiverTurn(playerId, args) {
+    if (!hasPerm(playerId, "panel")) {
+        say(playerId, "Staff only.", "#ff5555");
+        return;
+    }
+
+    const type = String(args[1] || "").toLowerCase();
+
+    if (type === "reset") {
+        for (const key in QUEST_TYPES) GIVER_YAW[key] = 0;
+        saveGiverYaw();
+
+        for (const key in QUEST_TYPES) applyGiverYaw(key);
+        say(playerId, "All givers back to facing the middle.", "#55ff55");
+        return;
+    }
+
+    if (!QUEST_TYPES[type]) {
+        say(playerId, "Usage: /giverturn <fishing|hunting|mining|killing|reset> [degrees]", "#ff5555");
+        say(playerId, "Each use adds degrees, e.g. /giverturn fishing 90 turns it a quarter.", "#8a8a8a");
+
+        for (const key in QUEST_TYPES) {
+            say(playerId, "  " + key + " facing " + Math.round(giverYaw(key)) + " (nudge " + (GIVER_YAW[key] || 0) + ")", "#8a8a8a");
+        }
+        return;
+    }
+
+    const step = isFinite(Number(args[2])) ? Number(args[2]) : 90;
+
+    GIVER_YAW[type] = ((GIVER_YAW[type] || 0) + step) % 360;
+    saveGiverYaw();
+    applyGiverYaw(type);
+
+    say(playerId, QUEST_TYPES[type].title + " now faces " + Math.round(giverYaw(type)) + " degrees.", "#55ff55");
+    say(playerId, "Keep using /giverturn " + type + " 90 until it looks right.", "#8a8a8a");
+}
+
 function setupQuestGivers() {
     for (const key in QUEST_TYPES) {
         if (QUEST_NPCS[key]) continue;
@@ -3137,9 +3213,7 @@ function setupQuestGivers() {
         QUEST_NPCS[key] = eId;
 
         try { api.setPosition(eId, giver.x, giver.y, giver.z); } catch (e) { }
-        try {
-            api.setEntityRotation(eId, 0, yawTo(giver.x, giver.z, QUEST_CENTRE[0], QUEST_CENTRE[2]), 0);
-        } catch (e) { }
+        applyGiverYaw(key);
     }
 }
 
@@ -3608,6 +3682,11 @@ playerCommand = function (playerId, command) {
         return false;
     }
 
+    if (cmd === "giverturn" || cmd === "faceturn") {
+        cmdGiverTurn(playerId, args);
+        return false;
+    }
+
     if (cmd === "panel" || cmd === "hud") {
         cmdPanel(playerId);
         return false;
@@ -3770,4 +3849,5 @@ loadLists();
 loadStaff();
 pruneStaff();
 setupStaffShop();
+loadGiverYaw();
 setupQuestGivers();
