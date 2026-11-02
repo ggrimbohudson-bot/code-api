@@ -1186,15 +1186,50 @@ function rightInfoPlain(playerId) {
     return lines.join("\n");
 }
 
-function pushRightInfo(playerId) {
+// Players who hid the side panel with /panel.
+const PANEL_OFF = {};
+
+function pushRightInfo(playerId, force) {
     if (!P[playerId]) return;
 
+    const rt = RT[playerId] || (RT[playerId] = {});
+
+    if (PANEL_OFF[playerId]) {
+        // Clear the box once, not on every tick.
+        if (rt.panelHidden !== true) {
+            rt.panelHidden = true;
+            try { api.setClientOption(playerId, "RightInfoText", ""); } catch (e) { }
+        }
+        return;
+    }
+
+    rt.panelHidden = false;
+
+    const text = rightInfoText(playerId);
+    const hash = JSON.stringify(text);
+    const now = Date.now();
+
+    // Only resend when something actually changed, plus once a minute in
+    // case the client dropped it. A panel the client refuses can then
+    // never spam an error every tick.
+    if (!force && rt.panelHash === hash && now - (rt.panelAt || 0) < 60000) return;
+
+    rt.panelHash = hash;
+    rt.panelAt = now;
+
     try {
-        api.setClientOption(playerId, "RightInfoText", rightInfoText(playerId));
+        api.setClientOption(playerId, "RightInfoText", text);
         return;
     } catch (e) { }
 
     try { api.setClientOption(playerId, "RightInfoText", rightInfoPlain(playerId)); } catch (e) { }
+}
+
+function cmdPanel(playerId) {
+    PANEL_OFF[playerId] = !PANEL_OFF[playerId];
+    pushRightInfo(playerId, true);
+
+    say(playerId, PANEL_OFF[playerId] ? "Side panel hidden. /panel to bring it back." : "Side panel back on.", "#55ff55");
 }
 
 function boardTick() {
@@ -1243,6 +1278,7 @@ function cmdHelp(playerId) {
     say(playerId, "  /staff - who is online to help", "#ffffff");
     say(playerId, "  /board - refresh the G leaderboard", "#ffffff");
     say(playerId, "  /discord - the server invite link", "#ffffff");
+    say(playerId, "  /panel - hide or show the side panel", "#ffffff");
 
     if (hasPerm(playerId, "panel")) {
         const r = rankInfo(playerId);
@@ -3304,7 +3340,7 @@ onPlayerJoin = function (playerId) {
         say(playerId, "Staff rank: " + r.name + "  |  Press B or N for your staff menu", r.colour);
     }
 
-    pushRightInfo(playerId);
+    pushRightInfo(playerId, true);
 };
 
 onPlayerLeave = function (playerId) {
@@ -3510,6 +3546,11 @@ playerCommand = function (playerId, command) {
         } else {
             say(playerId, "Usage: /quest <fishing|hunting|mining|killing>", "#ff5555");
         }
+        return false;
+    }
+
+    if (cmd === "panel" || cmd === "hud") {
+        cmdPanel(playerId);
         return false;
     }
 
