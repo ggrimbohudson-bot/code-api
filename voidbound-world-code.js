@@ -3102,13 +3102,20 @@ function yawTo(x, z, targetX, targetZ) {
 // size, and nothing attached on top. If a skin name is refused, the next one
 // in the list is tried and the last resort is a plain person, so a giver
 // always exists.
-// Only the documented head skin is used: an unknown cosmetic name makes the
-// engine refuse the call, which is what left givers missing before.
+// Every NPC skin Bloxd exposes, from SKINS_AND_POSES.md. They are applied
+// through the head slot, and the piggy trader is "piggy_banker", not
+// "trader_piggy" - which is why a guessed name fell back to plain black.
+const NPC_SKINS = [
+    "trader_black", "trader_blue", "trader", "wizard", "zombie", "general", "chef",
+    "farmer", "farmer_gill", "monster_hunter_lorenzo", "painter_spencer",
+    "piggy_banker", "portal_mage", "tentacle_guy",
+];
+
 const GIVER_LOOKS = {
-    fishing: { size: 1.05, heads: ["trader_black"] },
-    hunting: { size: 0.9, heads: ["trader_black"] },
-    mining: { size: 1.2, heads: ["trader_black"] },
-    killing: { size: 1.35, heads: ["trader_black"] },
+    fishing: { size: 1.05, heads: ["trader_blue"] },
+    hunting: { size: 0.95, heads: ["monster_hunter_lorenzo"] },
+    mining: { size: 1.2, heads: ["zombie"] },
+    killing: { size: 1.35, heads: ["general"] },
 };
 
 // Which head cosmetic each giver wears. Saved, and switchable in game with
@@ -3117,10 +3124,19 @@ const GIVER_LOOKS = {
 // "no skins" looks like.
 const GIVER_SKIN_KEY = "vb_giver_skin_v1";
 const GIVER_SKINS = {};
-const SKIN_TRIES = ["trader_black", "trader_blue", "trader_piggy"];
+const SKIN_TRIES = NPC_SKINS;
+
+function defaultSkin(type) {
+    const look = GIVER_LOOKS[type];
+    return (look && look.heads && look.heads[0]) || "trader_black";
+}
+
+function knownSkin(name) {
+    return NPC_SKINS.indexOf(String(name)) !== -1;
+}
 
 function giverSkin(type) {
-    return GIVER_SKINS[type] || "trader_black";
+    return GIVER_SKINS[type] || defaultSkin(type);
 }
 
 function loadGiverSkins() {
@@ -3131,7 +3147,11 @@ function loadGiverSkins() {
     try { saved = raw ? JSON.parse(raw) : {}; } catch (e) { saved = {}; }
 
     for (const key in QUEST_TYPES) {
-        GIVER_SKINS[key] = typeof saved[key] === "string" && saved[key] ? saved[key] : "trader_black";
+        const savedName = saved && saved[key];
+
+        // A name left over from an older version (or a typo) would silently
+        // fall back to a plain person, so only known skins are kept.
+        GIVER_SKINS[key] = knownSkin(savedName) ? String(savedName) : defaultSkin(key);
     }
 }
 
@@ -3286,6 +3306,10 @@ function cmdGiverSkin(playerId, args) {
         GIVER_SKINS[type] = SKIN_TRIES[(at + 1) % SKIN_TRIES.length];
     } else if (wanted) {
         GIVER_SKINS[type] = wanted.toLowerCase();
+
+        if (!knownSkin(GIVER_SKINS[type])) {
+            say(playerId, "Warning: " + GIVER_SKINS[type] + " is not in Bloxd's skin list.", "#ff9a9a");
+        }
     } else {
         say(playerId, QUEST_TYPES[type].title + " wears " + giverSkin(type) + ".", "#8a8a8a");
         return;
