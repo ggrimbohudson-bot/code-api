@@ -38,6 +38,8 @@ IDEAS_KEY: "vb_ideas_v1",
 UPDATES_KEY: "vb_updates_v1",
 STAFF_KEY: "vb_staff_v1",
 MAX_GIVE: 256,
+MAX_GRANT_SHARDS: 10000000,
+MAX_GRANT_LEVELS: 500,
 MAX_MUTE_MIN: 1440,
 MAX_TEMP_BAN_DAYS: 30,
 WARNS_MAX: 120,
@@ -55,6 +57,7 @@ const PERM = {
 panel: 1, staffchat: 1, warn: 1, tp: 1, players: 1, warns: 1,
 kick: 2, mute: 2, unmute: 2, tempban: 2,
 fly: 3, give: 3, gm: 3, ban: 3, unban: 3, tphere: 3, tppos: 3, banlist: 3, clearbans: 3,
+level: 3, shards: 3,
 rank: 4, events: 4, updates: 4, clearlists: 4,
 };
 const RANK_ALIASES = {
@@ -485,6 +488,7 @@ xp: 0,
 weapons: {},
 armour: {},
 armourWorn: "",
+rewards: {},
 },
 quests: {},
 skills: {},
@@ -519,6 +523,11 @@ if (old.stats.armour[aid]) d.stats.armour[aid] = true;
 }
 }
 if (typeof old.stats.armourWorn === "string") d.stats.armourWorn = old.stats.armourWorn;
+if (old.stats.rewards && typeof old.stats.rewards === "object") {
+for (const rkey in old.stats.rewards) {
+if (old.stats.rewards[rkey]) d.stats.rewards[rkey] = true;
+}
+}
 }
 for (const type in QUEST_TYPES) {
 const skill = old.skills && old.skills[type];
@@ -1401,6 +1410,8 @@ say(playerId, "  /weapon info <id> - D, S, C and the cost", "#ffffff");
 say(playerId, "  /armour - sets, P/H/R, prices and abilities", "#ffffff");
 say(playerId, "  /armour buy <set> - the full four piece set", "#ffffff");
 say(playerId, "  /armour wear <set> | /armour off", "#ffffff");
+say(playerId, "  /rewards - playtime rewards", "#ffffff");
+say(playerId, "  /rewards claim - take everything ready", "#ffffff");
 say(playerId, "HOMES", "#55aaff");
 say(playerId, "  /home [1-" + HOME_SLOTS + "] - teleport home", "#ffffff");
 say(playerId, "  /sethome [1-" + HOME_SLOTS + "] - set a home here", "#ffffff");
@@ -1427,6 +1438,8 @@ say(playerId, "  Press B or N - staff menu with every tool you can use", "#fffff
 say(playerId, "  /admin - text version of the same panel", "#ffffff");
 say(playerId, "  /giverturn <type> [degrees] - aim a quest giver", "#ffffff");
 say(playerId, "  /giverskin <type> [skin|next] - change a giver's skin", "#ffffff");
+if (hasPerm(playerId, "level")) say(playerId, "  /givelevel <player> <levels>  |  /setlevel <player> <level>", "#ffffff");
+if (hasPerm(playerId, "shards")) say(playerId, "  /giveshards <player> <amount>  |  /takeshards <player> <amount>", "#ffffff");
 }
 say(playerId, "  /diag - check givers, panel and recent errors", "#ffffff");
 say(playerId, "Text not showing colour? Test it with /style", "#5a5a5a");
@@ -1525,9 +1538,201 @@ richSay(playerId, leaderboardRow(playerId, { id: playerId }, ownRank - 1, key, o
 }
 say(playerId, "Kill players, mobs and stay online to climb.", "#5a5a5a");
 }
+const TIME_REWARDS = [
+{ minutes: 15, shards: 250 },
+{ minutes: 30, shards: 500 },
+{ minutes: 60, shards: 1000 },
+{ minutes: 120, shards: 2000 },
+{ minutes: 180, shards: 3000 },
+{ minutes: 300, shards: 5000 },
+{ minutes: 480, shards: 8000 },
+{ minutes: 720, shards: 12000 },
+{ minutes: 1440, shards: 25000 },
+{ minutes: 2880, shards: 50000 },
+{ minutes: 6000, shards: 100000 },
+];
+function rewardLabel(r) {
+if (r.minutes < 60) return r.minutes + "m";
+const h = r.minutes / 60;
+return (h % 1 === 0 ? h : h.toFixed(1)) + "h";
+}
+function rewardKey(r) {
+return String(r.minutes);
+}
+function rewardClaimed(d, r) {
+return !!(d && d.stats && d.stats.rewards && d.stats.rewards[rewardKey(r)]);
+}
+function rewardReady(d, r) {
+return !!d && !!d.stats && d.stats.playtimeMs >= r.minutes * 60000 && !rewardClaimed(d, r);
+}
+function timeRewardFor(minutes) {
+const want = Math.floor(Number(minutes) || 0);
+for (let i = 0; i < TIME_REWARDS.length; i++) {
+if (TIME_REWARDS[i].minutes === want) return TIME_REWARDS[i];
+}
+return null;
+}
+function claimTimeReward(playerId, r) {
+const d = ensure(playerId);
+if (!r || !rewardReady(d, r)) return 0;
+if (!d.stats.rewards) d.stats.rewards = {};
+d.stats.rewards[rewardKey(r)] = true;
+addShards(playerId, r.shards, true);
+say(playerId, "Claimed " + rewardLabel(r) + " playtime: +" + fmtNum(r.shards) + " " + CFG.CURRENCY_NAME, "#55ff55");
+saveNow(playerId);
+return r.shards;
+}
+function nextTimeReward(d) {
+for (let i = 0; i < TIME_REWARDS.length; i++) {
+if (!rewardClaimed(d, TIME_REWARDS[i])) return TIME_REWARDS[i];
+}
+return null;
+}
+function cmdRewards(playerId, args) {
+const d = ensure(playerId);
+const sub = keyOf(args[1]);
+if (sub === "claim" || sub === "collect" || sub === "take") {
+const asked = args[2];
+let total = 0;
+let count = 0;
+if (asked) {
+const only = timeRewardFor(asked);
+if (!only) {
+say(playerId, "No reward at " + asked + ". Use /rewards to see the list.", "#ff5555");
+return;
+}
+if (rewardClaimed(d, only)) {
+say(playerId, rewardLabel(only) + " is already claimed.", "#ff5555");
+return;
+}
+if (d.stats.playtimeMs < only.minutes * 60000) {
+say(playerId, "Not yet - you have " + fmtShortTime(d.stats.playtimeMs) + " played and " + rewardLabel(only) + " is the target.", "#ff5555");
+return;
+}
+total = claimTimeReward(playerId, only);
+count = total ? 1 : 0;
+} else {
+for (let i = 0; i < TIME_REWARDS.length; i++) {
+const paid = claimTimeReward(playerId, TIME_REWARDS[i]);
+if (paid) {
+total += paid;
+count++;
+}
+}
+}
+if (!count) {
+const next = nextTimeReward(d);
+if (!next) say(playerId, "Every playtime reward is claimed.", "#8a8a8a");
+else say(playerId, "Nothing ready. Next is " + rewardLabel(next) + " for " + fmtNum(next.shards) + " " + CFG.CURRENCY_NAME + " (" + fmtShortTime(Math.max(0, next.minutes * 60000 - d.stats.playtimeMs)) + " to go).", "#8a8a8a");
+return;
+}
+say(playerId, "Playtime rewards claimed: " + count + "  |  +" + fmtNum(total) + " " + CFG.CURRENCY_NAME, "#ffcc00");
+pushRightInfo(playerId, true);
+saveNow(playerId);
+return;
+}
+const played = d.stats.playtimeMs;
+let claimed = 0;
+say(playerId, "== PLAYTIME REWARDS ==", "#ffcc00");
+say(playerId, "Played " + fmtShortTime(played) + "  |  " + fmtNum(d.shards) + " " + CFG.CURRENCY_NAME, "#8a8a8a");
+for (let i = 0; i < TIME_REWARDS.length; i++) {
+const r = TIME_REWARDS[i];
+const label = (rewardLabel(r) + "      ").slice(0, 6);
+if (rewardClaimed(d, r)) {
+claimed++;
+say(playerId, "  " + label + " " + fmtNum(r.shards) + " - claimed", "#5a5a5a");
+} else if (rewardReady(d, r)) {
+say(playerId, "  " + label + " " + fmtNum(r.shards) + " - READY, claim it", "#55ff55");
+} else {
+say(playerId, "  " + label + " " + fmtNum(r.shards) + " - " + fmtShortTime(r.minutes * 60000 - played) + " to go", "#8a8a8a");
+}
+}
+say(playerId, claimed + "/" + TIME_REWARDS.length + " claimed. /rewards claim takes all ready ones.", "#55ffff");
+}
+function setOverallLevel(playerId, level) {
+const d = ensure(playerId);
+const want = Math.max(1, Math.min(1000, Math.floor(Number(level) || 1)));
+d.stats.xp = levelFloorXp(want);
+saveNow(playerId);
+syncBoard(playerId);
+pushRightInfo(playerId, true);
+return want;
+}
+function addOverallLevels(playerId, levels) {
+const d = ensure(playerId);
+const current = levelFor(d.stats.xp);
+const want = Math.max(1, Math.min(1000, current + Math.floor(Number(levels) || 0)));
+return setOverallLevel(playerId, want);
+}
+function cmdLevelGrant(playerId, args, mode) {
+if (!hasPerm(playerId, "level")) {
+deny(playerId, "level");
+return;
+}
+const targetName = args[1];
+const amount = parseInt(args[2], 10);
+const usage = mode === "set" ? "Usage: /setlevel <player> <level>" : "Usage: /givelevel <player> <levels>";
+if (!targetName || !isFinite(amount) || amount < 0) {
+say(playerId, usage, "#ff5555");
+return;
+}
+const target = targetOrComplain(playerId, targetName);
+if (!target) return;
+if (amount > CFG.MAX_GRANT_LEVELS) {
+say(playerId, "Max is " + CFG.MAX_GRANT_LEVELS + " levels in one go.", "#ff5555");
+return;
+}
+const before = levelFor(ensure(target).stats.xp);
+const after = mode === "set" ? setOverallLevel(target, amount) : addOverallLevels(target, amount);
+say(playerId, nameOf(target) + " is overall level " + after + " (was " + before + ").", "#55ff55");
+say(target, "Your overall level is now " + after + ".", "#b48cff");
+staffBroadcast("[STAFF] " + nameOf(playerId) + " put " + nameOf(target) + " at level " + after + ".", "#ffcc00");
+}
+function cmdGrantShards(playerId, args, take) {
+if (!hasPerm(playerId, "shards")) {
+deny(playerId, "shards");
+return;
+}
+const targetName = args[1];
+const amount = parseInt(args[2], 10);
+if (!targetName || !isFinite(amount) || amount <= 0) {
+say(playerId, "Usage: /" + (take ? "takeshards" : "giveshards") + " <player> <amount>", "#ff5555");
+return;
+}
+const target = targetOrComplain(playerId, targetName);
+if (!target) return;
+const cap = Math.min(amount, CFG.MAX_GRANT_SHARDS);
+const d = ensure(target);
+if (take) {
+const gone = Math.min(cap, d.shards);
+if (!gone) {
+say(playerId, nameOf(target) + " has no shards to take.", "#ff5555");
+return;
+}
+d.shards -= gone;
+syncShards(target);
+saveNow(target);
+say(playerId, "Took " + fmtNum(gone) + " from " + nameOf(target) + " (balance " + fmtNum(d.shards) + ").", "#55ff55");
+say(target, "Staff took " + fmtNum(gone) + " " + CFG.CURRENCY_NAME + ". You have " + fmtNum(d.shards) + ".", "#ffaa55");
+staffBroadcast("[STAFF] " + nameOf(playerId) + " took " + fmtNum(gone) + " from " + nameOf(target) + ".", "#ffcc00");
+} else {
+addShards(target, cap, true);
+saveNow(target);
+say(playerId, "Gave " + fmtNum(cap) + " to " + nameOf(target) + " (balance " + fmtNum(d.shards) + ").", "#55ff55");
+say(target, "Staff gave you " + fmtNum(cap) + " " + CFG.CURRENCY_NAME + " - balance " + fmtNum(d.shards) + ".", "#55ff55");
+staffBroadcast("[STAFF] " + nameOf(playerId) + " gave " + nameOf(target) + " " + fmtNum(cap) + " " + CFG.CURRENCY_NAME + ".", "#ffcc00");
+}
+pushRightInfo(target, true);
+}
 function cmdShards(playerId) {
 const d = ensure(playerId);
 say(playerId, "Balance: " + fmtNum(d.shards) + " " + CFG.CURRENCY_NAME, "#ffff55");
+for (let i = 0; i < TIME_REWARDS.length; i++) {
+if (rewardReady(d, TIME_REWARDS[i])) {
+say(playerId, "Playtime reward ready: " + rewardLabel(TIME_REWARDS[i]) + " for " + fmtNum(TIME_REWARDS[i].shards) + " - /rewards claim", "#ffcc00");
+break;
+}
+}
 }
 function cmdPay(playerId, args) {
 const targetName = args[1];
@@ -1744,6 +1949,7 @@ return target;
 }
 function menuButtonsFor(playerId) {
 const buttons = [];
+buttons.push({ id: "vb_rewards", icon: "gift", keycode: "KeyR", description: "Playtime rewards" });
 if (rankLevel(playerId) < 1) return buttons;
 buttons.push({ id: "vb_panel", icon: "bars", keycode: "KeyN", description: "Staff menu (B)" });
 if (hasPerm(playerId, "fly")) {
@@ -2414,6 +2620,17 @@ if (hasPerm(playerId, "give")) {
 say(playerId, "ITEMS", "#55aaff");
 say(playerId, "  /give <item> [amount] - give yourself items", "#ffffff");
 }
+if (hasPerm(playerId, "level") || hasPerm(playerId, "shards")) {
+say(playerId, "ECONOMY", "#55aaff");
+if (hasPerm(playerId, "level")) {
+say(playerId, "  /givelevel <player> <levels> - add overall levels", "#ffffff");
+say(playerId, "  /setlevel <player> <level> - set an exact level", "#ffffff");
+}
+if (hasPerm(playerId, "shards")) {
+say(playerId, "  /giveshards <player> <amount> - hand out Void Shards", "#ffffff");
+say(playerId, "  /takeshards <player> <amount> - claw shards back", "#ffffff");
+}
+}
 say(playerId, "PLAYERS", "#55aaff");
 say(playerId, "  /players - online list with ranks", "#ffffff");
 if (hasPerm(playerId, "warn")) say(playerId, "  /warn <player> <reason>", "#ffffff");
@@ -2444,6 +2661,7 @@ const SHOP_CATS = {
 staff: { key: "vb_staff", title: "Staff", blurb: "Flight, movement, items and staff chat.", sort: 90 },
 mod: { key: "vb_mod", title: "Moderation", blurb: "Warn, mute, kick, temp ban and bans.", sort: 89 },
 owner: { key: "vb_owner", title: "Founder", blurb: "Ranks, events and the update log.", sort: 88 },
+econ: { key: "vb_econ", title: "Economy", blurb: "Levels and Void Shards for any player.", sort: 87 },
 };
 function words(text) {
 const s = String(text === undefined || text === null ? "" : text).trim();
@@ -2700,6 +2918,62 @@ desc: "Wipe the player idea board.",
 image: "Diamond",
 args: function () { return ["event", "clearideas"]; },
 },
+{
+id: "vb_givelevel", cat: SHOP_CATS.econ, perm: "level",
+title: "Give levels",
+desc: "Pick a player, then type how many overall levels to add.",
+image: "Gold Ingot",
+target: "player",
+step2: {
+title: function (name) { return "Add levels to " + name; },
+desc: "Type how many levels to add, e.g. 5.",
+image: "Gold Ingot",
+input: function () { return textInput("5"); },
+args: function (target, input) { return ["givelevel", target, String(input || "").trim()]; },
+},
+},
+{
+id: "vb_setlevel", cat: SHOP_CATS.econ, perm: "level",
+title: "Set level",
+desc: "Pick a player, then type the overall level they should be.",
+image: "Gold Block",
+target: "player",
+step2: {
+title: function (name) { return "Set level for " + name; },
+desc: "Type the level, e.g. 25.",
+image: "Gold Block",
+input: function () { return textInput("25"); },
+args: function (target, input) { return ["setlevel", target, String(input || "").trim()]; },
+},
+},
+{
+id: "vb_giveshards", cat: SHOP_CATS.econ, perm: "shards",
+title: "Give shards",
+desc: "Pick a player, then type how many Void Shards to give.",
+image: "Gold Coin",
+target: "player",
+step2: {
+title: function (name) { return "Give shards to " + name; },
+desc: "Type an amount, e.g. 5000.",
+image: "Gold Coin",
+input: function () { return textInput("5000"); },
+args: function (target, input) { return ["giveshards", target, String(input || "").trim()]; },
+},
+},
+{
+id: "vb_takeshards", cat: SHOP_CATS.econ, perm: "shards",
+title: "Take shards",
+desc: "Pick a player, then type how many Void Shards to remove.",
+image: "Silver Coin",
+target: "player",
+step2: {
+title: function (name) { return "Take shards from " + name; },
+desc: "Type an amount, e.g. 2000.",
+image: "Silver Coin",
+input: function () { return textInput("2000"); },
+args: function (target, input) { return ["takeshards", target, String(input || "").trim()]; },
+},
+},
 ];
 for (let i = 0; i < MENU.length; i++) MENU[i].sort = 1000 - i * 10;
 function shopTile(image, title, desc, hidden, sort) {
@@ -2778,6 +3052,7 @@ putShopItem(playerId, entry.cat.key, entry.id + "_go", stepTile(entry, pending, 
 putShopItem(playerId, SHOP_CATS.staff.key, "vb_cancel", cancelTile(!!pending));
 putShopItem(playerId, SHOP_CATS.mod.key, "vb_cancel", cancelTile(!!pending));
 putShopItem(playerId, SHOP_CATS.owner.key, "vb_cancel", cancelTile(!!pending));
+putShopItem(playerId, SHOP_CATS.econ.key, "vb_cancel", cancelTile(!!pending));
 }
 function openStaffMenu(playerId, catKey) {
 if (rankLevel(playerId) < 1) {
@@ -2869,7 +3144,7 @@ refreshShop(playerId, catKey);
 return true;
 }
 function setupStaffShop() {
-const cats = [SHOP_CATS.staff, SHOP_CATS.mod, SHOP_CATS.owner];
+const cats = [SHOP_CATS.staff, SHOP_CATS.mod, SHOP_CATS.owner, SHOP_CATS.econ];
 for (let i = 0; i < cats.length; i++) {
 try {
 api.configureShopCategory(cats[i].key, {
@@ -3483,6 +3758,11 @@ return;
 if (buttonId === "vb_fly") {
 ensure(playerId);
 cmdFly(playerId);
+return;
+}
+if (buttonId === "vb_rewards") {
+ensure(playerId);
+cmdRewards(playerId, []);
 }
 };
 onPlayerBoughtShopItem = function (playerId, categoryKey, itemKey, item, userInput) {
@@ -3582,10 +3862,16 @@ const gained = minute - rt.minute;
 rt.minute = minute;
 addShards(id, CFG.SHARDS_PER_MINUTE * gained, true);
 gainXp(id, CFG.XP_MINUTE * gained);
+for (let i = 0; i < TIME_REWARDS.length; i++) {
+if (TIME_REWARDS[i].minutes === minute && !rewardClaimed(d, TIME_REWARDS[i])) {
+say(id, "Playtime reward ready: " + rewardLabel(TIME_REWARDS[i]) + " for " + fmtNum(TIME_REWARDS[i].shards) + " " + CFG.CURRENCY_NAME + " - /rewards claim", "#ffcc00");
+try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-ARMOUR-6";
+}
+}
+const BUILD = "VB-ECON-7";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
@@ -3679,6 +3965,26 @@ return false;
 }
 if (cmd === "level" || cmd === "lvl" || cmd === "xp") {
 cmdLevel(playerId);
+return false;
+}
+if (cmd === "rewards" || cmd === "reward" || cmd === "playtime") {
+cmdRewards(playerId, args);
+return false;
+}
+if (cmd === "givelevel" || cmd === "addlevel" || cmd === "addlevels") {
+cmdLevelGrant(playerId, args, "add");
+return false;
+}
+if (cmd === "setlevel" || cmd === "levelset") {
+cmdLevelGrant(playerId, args, "set");
+return false;
+}
+if (cmd === "giveshards" || cmd === "addshards") {
+cmdGrantShards(playerId, args, false);
+return false;
+}
+if (cmd === "takeshards" || cmd === "removeshards") {
+cmdGrantShards(playerId, args, true);
 return false;
 }
 if (cmd === "spawn" || cmd === "lobby") {
