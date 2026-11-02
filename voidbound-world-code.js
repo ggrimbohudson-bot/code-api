@@ -51,7 +51,7 @@
 //    /events ideas
 //    /updates
 //    /staff                staff roster
-//    /util                 utilities menu: homes and lobby spawn
+//    /util                 what the homes buttons in the B menu show
 //    /home [1-5]           teleport to a home
 //    /sethome [1-5]        set a home where you stand
 //    /homes                slots, what is unlocked and what is set
@@ -89,7 +89,7 @@
 //    /event add|remove|clearideas
 //    /updates add|remove
 //
-//  B MENU BUTTONS: Utilities (everyone), Staff menu (N) and Flight (F).
+//  B MENU BUTTONS: Home 1-5 and Lobby spawn (everyone), Staff menu (N) and Flight (F).
 //
 //  HOTKEYS for staff: N = staff menu, F = fly.
 // ============================================================
@@ -1523,20 +1523,50 @@ const HOME_COST = 1000;
 const LOBBY_SPAWN = [10000, -9999, 10000];
 
 const HOME_ICONS = {
-    set: "Gold Clock",
-    empty: "Wood Clock",
-    locked: "Diamond",
-    lobby: "Compass",
+    set: "home",
+    empty: "clock",
+    locked: "lock",
+    lobby: "compass",
 };
 
-let utilShopReady = false;
+// The utilities menu holds one button per home slot, so its icon and text
+// have to reflect that player's state every time the menu is drawn.
+function homeButtonIcon(d, index) {
+    if (index + 1 > d.homeSlots) return HOME_ICONS.locked;
+    return d.homes[index] ? HOME_ICONS.set : HOME_ICONS.empty;
+}
 
-const UTIL_SHOP = {
-    key: "vb_util",
-    title: "Utilities",
-    blurb: "Homes, lobby spawn and quick travel. First home free, then 1,000 each.",
-    sort: 95,
-};
+function homeButtonText(d, index) {
+    const n = index + 1;
+
+    if (n > d.homeSlots) return "Home " + n + " - locked, " + fmtNum(HOME_COST) + " " + CFG.CURRENCY_NAME;
+
+    const spot = d.homes[index];
+    if (!spot) return "Home " + n + " - tap to set it here";
+
+    return "Home " + n + " - " + Math.round(spot.x) + ", " + Math.round(spot.y) + ", " + Math.round(spot.z);
+}
+
+// One action per press: a locked slot buys, an empty slot sets, a set slot
+// teleports. The button text already says which one it will do.
+function useHomeSlot(playerId, slot) {
+    const d = ensure(playerId);
+
+    if (!(slot >= 1 && slot <= HOME_SLOTS)) return;
+
+    if (slot > d.homeSlots) {
+        unlockHome(playerId, slot);
+        return;
+    }
+
+    if (!d.homes[slot - 1]) {
+        setHome(playerId, slot);
+        return;
+    }
+
+    useHome(playerId, slot);
+}
+
 
 // Old saves have no homes at all, so the array is rebuilt rather than
 // trusted: a broken slot must never cost a player a teleport.
@@ -1608,7 +1638,7 @@ function setHome(playerId, raw) {
 
     d.homes[slot - 1] = spot;
     saveNow(playerId);
-    renderUtilMenu(playerId);
+    syncClientButtons(playerId);
 
     say(playerId, "Home " + slot + " set to " + Math.round(spot.x) + ", " + Math.round(spot.y) + ", " + Math.round(spot.z) + ".", "#55ff55");
     return true;
@@ -1661,7 +1691,7 @@ function unlockHome(playerId, raw) {
 
     d.homeSlots = slot;
     saveNow(playerId);
-    renderUtilMenu(playerId);
+    syncClientButtons(playerId);
 
     say(playerId, "Home " + slot + " unlocked for " + fmtNum(HOME_COST) + " " + CFG.CURRENCY_NAME + ". /sethome " + slot, "#55ff55");
     return true;
@@ -1682,7 +1712,7 @@ function cmdHomes(playerId) {
         else say(playerId, "  " + n + ": " + Math.round(home.x) + ", " + Math.round(home.y) + ", " + Math.round(home.z), "#55ff55");
     }
 
-    say(playerId, "/home <n> teleports, /sethome <n> moves one. /util opens the menu.", "#5a5a5a");
+    say(playerId, "/home <n> teleports, /sethome <n> moves one. All of them are buttons in the B menu.", "#5a5a5a");
 }
 
 function cmdLobby(playerId) {
@@ -1693,123 +1723,14 @@ function cmdLobby(playerId) {
     say(playerId, "Lobby spawn.", "#8fd0ff");
 }
 
-function utilTile(image, title, desc, hidden, sort, colour) {
-    const item = shopTile(image, title, desc, hidden, sort);
-    item.imageColour = colourName(colour || "#8fd0ff");
-    item.buyButtonText = { str: "Use", style: styleFor(colour || "#8fd0ff") };
-    return item;
-}
 
-function homeTile(d, index) {
-    const n = index + 1;
-    const home = d.homes[index];
 
-    if (n > d.homeSlots) {
-        return utilTile(HOME_ICONS.locked,
-            [{ icon: HOME_ICONS.locked }, { str: " Home " + n, style: styleFor("#8a8a8a") }],
-            [{ str: "Locked", style: styleFor("#8a8a8a") },
-             { str: "\nUnlock for " + fmtNum(HOME_COST) + " " + CFG.CURRENCY_NAME, style: styleFor("#ffd75e") },
-             { str: "\n" + d.homeSlots + " of " + HOME_SLOTS + " unlocked", style: styleFor("#5a5a5a") }],
-            false, 100 - n, "#8a8a8a");
-    }
 
-    if (!home) {
-        return utilTile(HOME_ICONS.empty,
-            [{ icon: HOME_ICONS.empty }, { str: " Home " + n, style: styleFor("#8fd0ff") }],
-            [{ str: "Empty", style: styleFor("#8fd0ff") },
-             { str: "\nTap to set it where you stand", style: styleFor("#e0e0e0") },
-             { str: "\nFirst slot is free", style: styleFor("#5a5a5a") }],
-            false, 100 - n, "#8fd0ff");
-    }
 
-    return utilTile(HOME_ICONS.set,
-        [{ icon: HOME_ICONS.set }, { str: " Home " + n, style: styleFor("#55ff55") }],
-        [{ str: "Tap to teleport", style: styleFor("#55ff55") },
-         { str: "\n" + Math.round(home.x) + ", " + Math.round(home.y) + ", " + Math.round(home.z), style: styleFor("#8a8a8a") },
-         { str: "\n/sethome " + n + " to move it", style: styleFor("#5a5a5a") }],
-        false, 100 - n, "#55ff55");
-}
 
-function lobbyTile() {
-    return utilTile(HOME_ICONS.lobby,
-        [{ icon: HOME_ICONS.lobby }, { str: " Lobby Spawn", style: styleFor("#ffcc00") }],
-        [{ str: "Tap to teleport to spawn", style: styleFor("#ffcc00") },
-         { str: "\n10000, -9999, 10000", style: styleFor("#8a8a8a") }],
-        false, 90, "#ffcc00");
-}
-
-function renderUtilMenu(playerId) {
-    const d = ensureHomes(ensure(playerId));
-    if (!d) return;
-
-    for (let i = 0; i < HOME_SLOTS; i++) {
-        putShopItem(playerId, UTIL_SHOP.key, "vb_home_" + (i + 1), homeTile(d, i));
-    }
-
-    putShopItem(playerId, UTIL_SHOP.key, "vb_home_lobby", lobbyTile());
-}
-
-function setupUtilShop() {
-    try {
-        api.configureShopCategory(UTIL_SHOP.key, {
-            customTitle: UTIL_SHOP.title,
-            description: UTIL_SHOP.blurb,
-            sortPriority: UTIL_SHOP.sort,
-            autoSelectCategory: false,
-        });
-    } catch (e) {
-        noteError("utilities shop", e);
-    }
-
-    // Base tiles exist once, so every slot has something for a player copy
-    // to sit on. Re-creating them on every open just threw work away.
-    if (utilShopReady) return;
-    utilShopReady = true;
-
-    for (let i = 0; i < HOME_SLOTS; i++) baseShopItem(UTIL_SHOP.key, "vb_home_" + (i + 1), HOME_ICONS.locked);
-    baseShopItem(UTIL_SHOP.key, "vb_home_lobby", HOME_ICONS.lobby);
-}
-
-function openUtilMenu(playerId) {
-    ensure(playerId);
-    setupUtilShop();
-    renderUtilMenu(playerId);
-
-    try {
-        api.openShop(playerId, false, UTIL_SHOP.key, false);
-        return;
-    } catch (e) {
-        noteError("utilities open", e);
-    }
-
-    cmdHomes(playerId);
-}
 
 // A Utilities tile does the obvious thing for the slot it sits on: a locked
 // slot unlocks, an empty one is set here, a set one teleports.
-function handleUtilShopBuy(playerId, itemKey) {
-    const d = ensureHomes(ensure(playerId));
-    if (!d) return false;
-
-    if (itemKey === "vb_home_lobby") {
-        cmdLobby(playerId);
-        renderUtilMenu(playerId);
-        return true;
-    }
-
-    const match = /^vb_home_([1-9])$/.exec(String(itemKey || ""));
-    if (!match) return false;
-
-    const slot = homeSlotArg(match[1]);
-    if (!slot) return false;
-
-    if (slot > d.homeSlots) unlockHome(playerId, slot);
-    else if (!d.homes[slot - 1]) setHome(playerId, slot);
-    else useHome(playerId, slot);
-
-    renderUtilMenu(playerId);
-    return true;
-}
 
 // ---------------- COMMANDS ----------------
 
@@ -2314,13 +2235,22 @@ function targetOrComplain(playerId, name) {
     return target;
 }
 
-// The buttons in the B menu. Utilities is first and belongs to everyone,
-// so a normal player has one obvious way into homes and the lobby spawn.
-// Staff buttons are added on top of it, never instead of it.
+// The buttons in the B menu, which is where Bloxd keeps its utilities. Every
+// player gets a button per home slot plus the lobby spawn; staff buttons are
+// added on top of those, never instead of them.
 function menuButtonsFor(playerId) {
-    const buttons = [
-        { id: "vb_util", icon: "compass", description: "Homes and lobby spawn (B)" },
-    ];
+    const d = ensure(playerId);
+    const buttons = [];
+
+    for (let i = 0; i < HOME_SLOTS; i++) {
+        buttons.push({
+            id: "vb_home_" + (i + 1),
+            icon: homeButtonIcon(d, i),
+            description: homeButtonText(d, i),
+        });
+    }
+
+    buttons.push({ id: "vb_spawn", icon: HOME_ICONS.lobby, description: "Lobby spawn - teleport to the lobby" });
 
     if (rankLevel(playerId) < 1) return buttons;
 
@@ -4468,7 +4398,7 @@ onPlayerJoin = function (playerId) {
     // Build the B-menu tiles this rank can use, then the utilities tab
     // every player has whatever their rank.
     renderStaffMenu(playerId);
-    renderUtilMenu(playerId);
+    syncClientButtons(playerId);
 
     const mute = STAFF.mutes[key];
     if (mute && (!mute.until || mute.until > Date.now())) {
@@ -4528,8 +4458,14 @@ onPlayerChat = function (playerId, chatMessage, channelName) {
 };
 
 onPlayerPressedButton = function (playerId, buttonId) {
-    if (buttonId === "vb_util") {
-        openUtilMenu(playerId);
+    if (buttonId.indexOf("vb_home_") === 0) {
+        useHomeSlot(playerId, parseInt(buttonId.slice(8), 10));
+        syncClientButtons(playerId);
+        return;
+    }
+
+    if (buttonId === "vb_spawn") {
+        cmdLobby(playerId);
         return;
     }
 
@@ -4549,11 +4485,6 @@ onPlayerPressedButton = function (playerId, buttonId) {
 // as clicking it.
 onPlayerBoughtShopItem = function (playerId, categoryKey, itemKey, item, userInput) {
     if (!categoryKey) return;
-
-    if (String(categoryKey) === UTIL_SHOP.key) {
-        handleUtilShopBuy(playerId, itemKey);
-        return;
-    }
 
     if (String(categoryKey) === CRATE_SHOP.key) {
         const crate = crateByShopKey(itemKey);
@@ -4768,7 +4699,7 @@ playerCommand = function (playerId, command) {
     }
 
     if (cmd === "util" || cmd === "utilities" || cmd === "homesmenu") {
-        openUtilMenu(playerId);
+        cmdHomes(playerId);
         return false;
     }
 
@@ -5288,11 +5219,6 @@ loadLists();
 loadStaff();
 pruneStaff();
 setupStaffShop();
-try {
-    setupUtilShop();
-} catch (e) {
-    noteError("utilities shop", e);
-}
 
 try {
     loadGiverYaw();
