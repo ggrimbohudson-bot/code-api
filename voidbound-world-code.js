@@ -730,7 +730,7 @@ function segText(value, colour) {
 // cannot render styling still gets readable, coloured rows.
 function richSay(playerId, segments) {
     try {
-        api.sendMessage(playerId, segments);
+        api.sendMessage(playerId, compactSegments(segments));
         return;
     } catch (e) { }
 
@@ -984,23 +984,27 @@ function boardColumns() {
     };
 }
 
-function setupBoard(playerId) {
+// Every call below is a message the engine has to serialise and send, so
+// anything that has not changed is skipped. Bloxd answers a tick that
+// pushes too much with "Internal Error: Argument Too Large".
+function setupBoard(playerId, force) {
+    const rt = RT[playerId] || (RT[playerId] = {});
+    const now = Date.now();
+
+    // The columns never change: send them once, then once a minute in
+    // case a client dropped them.
+    if (!force && rt.boardColsAt && now - rt.boardColsAt < 60000) return;
+
+    rt.boardColsAt = now;
+
     try {
         api.setClientOption(playerId, "lobbyLeaderboardInfo", boardColumns());
     } catch (e) { }
 }
 
-function syncBoard(playerId) {
+function syncBoard(playerId, force) {
     const d = P[playerId];
     if (!d) return;
-
-    try {
-        api.setTargetedPlayerSettingForEveryone(playerId, "lobbyLeaderboardValues", {
-            kills: d.stats.kills,
-            shards: Math.floor(d.shards),
-            hours: fmtHours(d.stats.playtimeMs),
-        }, true);
-    } catch (e) { }
 
     // Staff names get their rank colour on the board. This must be a
     // named colour: an unparseable hex value can cost the whole row,
@@ -1008,9 +1012,35 @@ function syncBoard(playerId) {
     // Non-staff are reset to "" so a demotion never leaves a stale
     // colour behind.
     const r = rankInfo(playerId);
+    const row = {
+        kills: d.stats.kills,
+        shards: Math.floor(d.shards),
+        hours: fmtHours(d.stats.playtimeMs),
+        colour: r.level > 0 ? colourName(r.colour) : "",
+    };
+
+    const rt = RT[playerId] || (RT[playerId] = {});
+    const hash = JSON.stringify(row);
+    const now = Date.now();
+
+    // Only rebroadcast a row that actually changed (or once a minute to
+    // heal a dropped one). Broadcasting every player's row every tick is
+    // what makes the engine report an oversized argument.
+    if (!force && rt.boardHash === hash && now - (rt.boardAt || 0) < 60000) return;
+
+    rt.boardHash = hash;
+    rt.boardAt = now;
+
     try {
-        api.setTargetedPlayerSettingForEveryone(playerId, "colorInLobbyLeaderboard",
-            r.level > 0 ? colourName(r.colour) : "", true);
+        api.setTargetedPlayerSettingForEveryone(playerId, "lobbyLeaderboardValues", {
+            kills: row.kills,
+            shards: row.shards,
+            hours: row.hours,
+        }, true);
+    } catch (e) { }
+
+    try {
+        api.setTargetedPlayerSettingForEveryone(playerId, "colorInLobbyLeaderboard", row.colour, true);
     } catch (e) { }
 }
 
@@ -1047,6 +1077,30 @@ function placeOf(playerId, key) {
 }
 
 // ---------------- RIGHT-SIDE HUD ----------------
+// Merge neighbouring text segments that share a colour into one. Every
+// segment carries its own style object, so this is the cheapest way to
+// keep big panels and chat lines under the engine's argument size.
+function compactSegments(list) {
+    const out = [];
+
+    for (const part of list) {
+        const last = out[out.length - 1];
+        const textOnly = last && typeof part.str === "string" && typeof last.str === "string" &&
+            !part.icon && !last.icon && !part.entityName && !last.entityName;
+        const sameStyle = last && (!part.style || last.style === undefined ||
+            JSON.stringify(last.style) === JSON.stringify(part.style));
+
+        if (textOnly && sameStyle) {
+            out[out.length - 1] = { str: last.str + part.str, style: last.style || part.style };
+            continue;
+        }
+
+        out.push(part);
+    }
+
+    return out;
+}
+
 // Everything that used to rotate through the bottom-middle text now
 // lives in the right info box, stacked under the personal stats line.
 
@@ -1150,7 +1204,7 @@ function rightInfoText(playerId) {
     out.push(segIcon("fa-solid fa-user-group", "#8fd0ff"));
     out.push(segText(" " + DISCORD_LINK.replace("https://", ""), "#8fd0ff"));
 
-    return out;
+    return compactSegments(out);
 }
 
 // Plain version, used when the styled one cannot be applied.
@@ -1248,8 +1302,8 @@ function cmdBoardRefresh(playerId) {
     let count = 0;
 
     for (const id in P) {
-        setupBoard(id);
-        syncBoard(id);
+        setupBoard(id, true);
+        syncBoard(id, true);
         count++;
     }
 
@@ -3306,8 +3360,8 @@ onPlayerJoin = function (playerId) {
 
     // Nametag colour and glowing rank subtitle first, then the board
     // row, so a rejected nametag setting cannot take the row with it.
+    // applyRankCosmetics pushes this player's board row already.
     applyRankCosmetics(playerId);
-    syncBoard(playerId);
 
     // Right info box now carries everything the bottom-middle line did.
     try { api.setClientOption(playerId, "middleTextLower", ""); } catch (e) { }
