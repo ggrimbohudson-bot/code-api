@@ -1192,30 +1192,30 @@ function rightInfoText(playerId) {
         out.push(segText("\n" + giver.short + " Lv" + levelFor(xp) + "  " + levelPercent(xp) + "%  " + levelBar(xp), giver.colour));
     }
 
-    // Whatever is currently being worked on, so the side panel answers
-    // "what do I do next" without a command.
+    // One row per giver, worded exactly like the giver says it, so the panel
+    // and the NPC can never disagree about what you are doing.
     out.push(segText("\n"));
     out.push(segIcon("fa-solid fa-flag", "#ffcc00"));
     out.push(segText(" QUESTS ", "#ffcc00"));
 
-    let hasQuest = false;
-
     for (const key in QUEST_TYPES) {
+        const giver = QUEST_TYPES[key];
         const quest = d.quests[key];
-        if (!quest) continue;
 
-        hasQuest = true;
+        out.push(segText("\n"));
+
+        // Nothing taken yet: point at the giver instead of hiding the row.
+        if (!quest) {
+            out.push(segIcon(giver.icon, "#5a5a5a"));
+            out.push(segText(" " + giver.short + ": see the " + giver.title, "#5a5a5a"));
+            continue;
+        }
+
         const ready = quest.have >= quest.need;
 
-        out.push(segText("\n"));
-        out.push(segIcon(QUEST_TYPES[key].icon, QUEST_TYPES[key].colour));
-        out.push(segText(" T" + (quest.tier || 1) + " " + quest.have + "/" + quest.need, ready ? "#55ff55" : "#dddddd"));
-        out.push(segText(ready ? " CLAIM" : "", "#55ff55"));
-    }
-
-    if (!hasQuest) {
-        out.push(segText("\n"));
-        out.push(segText("talk to the givers at 10000", "#5a5a5a"));
+        out.push(segIcon(giver.icon, ready ? "#55ff55" : giver.colour));
+        out.push(segText(" " + giver.short + " T" + (quest.tier || 1) + "  " + quest.have + "/" + quest.need + " " + giver.unit, ready ? "#55ff55" : "#dddddd"));
+        out.push(segText(ready ? "  CLAIM" : "", "#55ff55"));
     }
 
     if (LISTS.events.items.length) {
@@ -3767,6 +3767,7 @@ function assignQuest(playerId, type) {
     };
 
     saveNow(playerId);
+    pushRightInfo(playerId);
     return d.quests[type];
 }
 
@@ -3785,6 +3786,7 @@ function questProgress(playerId, type, amount) {
 
     const giver = QUEST_TYPES[type];
     saveNow(playerId);
+    pushRightInfo(playerId);
 
     say(playerId, "Quest complete: " + giver.verb + " " + quest.need + " " + giver.unit + ".", giver.colour);
     say(playerId, "Claim it with the " + giver.title + " for " + fmtNum(quest.shards) + " shards and " + quest.xp + " XP.", "#ffd75e");
@@ -3833,6 +3835,7 @@ function questTalk(playerId, type) {
     addShards(playerId, shards, true);
     const levelledTo = addXp(playerId, xp);
     saveNow(playerId);
+    pushRightInfo(playerId);
 
     richSay(playerId, [
         segIcon(giver.icon, giver.colour),
