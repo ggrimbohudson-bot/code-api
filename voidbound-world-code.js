@@ -977,10 +977,11 @@ function openCrate(playerId, crate) {
 
 function boardColumns() {
     return {
-        name: { displayName: "Name", sortPriority: 10 },
-        kills: { displayName: "Kills", sortPriority: 9, sortOrder: "descending" },
-        shards: { displayName: "Shards", sortPriority: 8, sortOrder: "descending" },
-        hours: { displayName: "Hours", sortPriority: 7, sortOrder: "descending" },
+        name: { displayName: "ℕ𝔸𝕄𝔼", sortPriority: 10 },
+        level: { displayName: "𝕃𝔼𝕍𝔼𝕃 %", sortPriority: 9, sortOrder: "descending" },
+        kills: { displayName: "𝕂𝕀𝕃𝕃𝕊", sortPriority: 8, sortOrder: "descending" },
+        shards: { displayName: "𝕊ℍ𝔸ℝ𝔻𝕊", sortPriority: 7, sortOrder: "descending" },
+        hours: { displayName: "ℍ𝕆𝕌ℝ𝕊", sortPriority: 6, sortOrder: "descending" },
     };
 }
 
@@ -1014,6 +1015,7 @@ function syncBoard(playerId, force) {
     const r = rankInfo(playerId);
     const row = {
         kills: d.stats.kills,
+        level: levelPercent(d.stats.xp),
         shards: Math.floor(d.shards),
         hours: fmtHours(d.stats.playtimeMs),
         colour: r.level > 0 ? colourName(r.colour) : "",
@@ -1034,6 +1036,7 @@ function syncBoard(playerId, force) {
     try {
         api.setTargetedPlayerSettingForEveryone(playerId, "lobbyLeaderboardValues", {
             kills: row.kills,
+            level: row.level,
             shards: row.shards,
             hours: row.hours,
         }, true);
@@ -1148,22 +1151,20 @@ function rightInfoText(playerId) {
         out.push(segText(" All crates ready - /crates", "#55ff55"));
     }
 
-    // A level per quest line, two to a row so the box stays short.
+    // One quest line per row, with the percent into the level and a bar.
     out.push(segText("\n"));
     out.push(segIcon("fa-solid fa-star", "#b48cff"));
     out.push(segText(" LEVELS ", "#b48cff"));
 
-    const skillKeys = Object.keys(QUEST_TYPES);
+    for (const key in QUEST_TYPES) {
+        const giver = QUEST_TYPES[key];
+        const xp = skillOf(playerId, key).xp;
 
-    for (let i = 0; i < skillKeys.length; i += 2) {
         out.push(segText("\n"));
-
-        for (let j = i; j < i + 2 && j < skillKeys.length; j++) {
-            const key = skillKeys[j];
-
-            if (j > i) out.push(segText("    ", "#8a8a8a"));
-            out.push(segText(QUEST_TYPES[key].short + " " + skillLevel(playerId, key), QUEST_TYPES[key].colour));
-        }
+        out.push(segIcon(giver.icon, giver.colour));
+        out.push(segText(" " + giver.short + " Lv" + levelFor(xp), giver.colour));
+        out.push(segText("  " + levelPercent(xp) + "%", "#dddddd"));
+        out.push(segText("  " + levelBar(xp), "#5a5a5a"));
     }
 
     // Whatever is currently being worked on, so the side panel answers
@@ -1222,7 +1223,11 @@ function rightInfoPlain(playerId) {
 
     const next = shardsToNextCrate(d);
     lines.push(next ? next.crate.name + " in " + fmtNum(next.missing) : "All crates ready - /crates");
-    lines.push("Levels: " + skillSummary(playerId));
+    for (const key in QUEST_TYPES) {
+        const xp = skillOf(playerId, key).xp;
+
+        lines.push(QUEST_TYPES[key].short + " Lv" + levelFor(xp) + " " + levelPercent(xp) + "% " + levelBar(xp));
+    }
 
     for (const key in QUEST_TYPES) {
         const quest = d.quests[key];
@@ -3024,6 +3029,25 @@ function xpIntoLevel(xp) {
     return Math.max(0, (Number(xp) || 0) - levelFloorXp(levelFor(xp)));
 }
 
+// How far into the current level, 0-100, for the side panel and the board.
+function levelPercent(xp) {
+    const need = xpToNextLevel(xp);
+    if (!need) return 0;
+
+    return Math.max(0, Math.min(100, Math.floor(xpIntoLevel(xp) * 100 / need)));
+}
+
+// A ten block bar of the level percent, built with a loop so it does not
+// depend on String.repeat being available in the world code engine.
+function levelBar(xp) {
+    const filled = Math.max(0, Math.min(10, Math.round(levelPercent(xp) / 10)));
+    let out = "";
+
+    for (let i = 0; i < 10; i++) out += i < filled ? "\u2593" : "\u2591";
+
+    return out;
+}
+
 function xpToNextLevel(xp) {
     const level = levelFor(xp);
     return levelFloorXp(level + 1) - levelFloorXp(level);
@@ -3062,51 +3086,42 @@ function yawTo(x, z, targetX, targetZ) {
     return (yaw + 360) % 360;
 }
 
-// Each giver wears its own glowing set - crown, chest gem and a ring of
-// light at the feet - so the four of them are easy to tell apart.
-const GIVER_FLAIR = {
-    fishing: { glow: [85, 245, 255], deep: [0, 165, 200] },
-    hunting: { glow: [255, 130, 130], deep: [190, 40, 40] },
-    mining: { glow: [255, 220, 90], deep: [185, 140, 0] },
-    killing: { glow: [200, 135, 255], deep: [120, 55, 210] },
+// Each giver is a differently built person: its own head skin and its own
+// size, and nothing attached on top. If a skin name is refused, the next one
+// in the list is tried and the last resort is a plain person, so a giver
+// always exists.
+const GIVER_LOOKS = {
+    fishing: { size: 1.1, heads: ["trader_blue", "trader_black"] },
+    hunting: { size: 0.95, heads: ["trader_piggy", "trader_black"] },
+    mining: { size: 1.2, heads: ["trader_black"] },
+    killing: { size: 1.35, heads: ["trader_blue", "trader_black"] },
 };
 
-function dressGiver(key, eId) {
-    const flair = GIVER_FLAIR[key];
-    if (!flair) return;
+function createGiver(key) {
+    const giver = QUEST_TYPES[key];
+    const look = GIVER_LOOKS[key] || { size: 1, heads: ["trader_black"] };
+    const name = giver.title + " - right-click me";
 
-    // Crown: a bright band just above the head.
-    try {
-        api.updateEntityNodeMeshAttachment(eId, "HeadMesh", "Box", {
-            width: 0.58,
-            height: 0.2,
-            depth: 0.58,
-            diffuseColor: flair.glow,
-            emissiveColor: flair.glow,
-        }, [0, 0.42, 0]);
-    } catch (e) { }
+    for (let i = 0; i < look.heads.length; i++) {
+        let eId = null;
 
-    // Chest gem, so the colour reads from the front.
-    try {
-        api.updateEntityNodeMeshAttachment(eId, "TorsoNode", "Box", {
-            width: 0.26,
-            height: 0.26,
-            depth: 0.26,
-            diffuseColor: flair.deep,
-            emissiveColor: flair.glow,
-        }, [0, 0.22, 0.3]);
-    } catch (e) { }
+        try {
+            eId = api.attemptCreateMeshEntity("Person", {
+                size: look.size,
+                pose: "standing",
+                textures: { head: look.heads[i] },
+            }, name);
+        } catch (e) { eId = null; }
 
-    // Glowing disc on the ground, like a summoning circle.
+        if (eId) return eId;
+    }
+
     try {
-        api.updateEntityNodeMeshAttachment(eId, "LegLeftMesh", "Box", {
-            width: 1.15,
-            height: 0.05,
-            depth: 1.15,
-            diffuseColor: flair.deep,
-            emissiveColor: flair.glow,
-        }, [0, -0.92, 0]);
-    } catch (e) { }
+        return api.attemptCreateMeshEntity("Person", {
+            size: look.size,
+            pose: "standing",
+        }, name);
+    } catch (e) { return null; }
 }
 
 function setupQuestGivers() {
@@ -3114,15 +3129,7 @@ function setupQuestGivers() {
         if (QUEST_NPCS[key]) continue;
 
         const giver = QUEST_TYPES[key];
-        let eId = null;
-
-        try {
-            eId = api.attemptCreateMeshEntity("Person", {
-                size: 1,
-                pose: "standing",
-                textures: { head: "trader_black" },
-            }, giver.title + " - right-click me");
-        } catch (e) { eId = null; }
+        const eId = createGiver(key);
 
         // null means the mesh entity limit was reached.
         if (!eId) continue;
@@ -3133,8 +3140,6 @@ function setupQuestGivers() {
         try {
             api.setEntityRotation(eId, 0, yawTo(giver.x, giver.z, QUEST_CENTRE[0], QUEST_CENTRE[2]), 0);
         } catch (e) { }
-
-        dressGiver(key, eId);
     }
 }
 
