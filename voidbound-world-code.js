@@ -3,6 +3,11 @@ DB_KEY: "vb_player_v1",
 CURRENCY_ID: "void_shards",
 CURRENCY_NAME: "Void Shards",
 CURRENCY_ICON: "coins",
+XP_KILL: 40,
+XP_MOB: 6,
+XP_MINE: 1,
+XP_FISH: 4,
+XP_MINUTE: 2,
 CURRENCY_COLOUR: "blue",
 SAVE_EVERY_MS: 60000,
 PANEL_LIMIT: 1900,
@@ -807,6 +812,7 @@ function openCrate(playerId, crate) {
 const d = ensure(playerId);
 const entry = rollEntry(crate);
 d.stats.cratesOpened++;
+gainXp(playerId, Math.max(5, Math.round(crate.price / 25)));
 const colour = RARITY_COLOUR[entry.r] || "#ffffff";
 say(playerId, "Opening " + crate.name + "...", "#9a9a9a");
 const chosen = entry.pick ? entry.pick[randInt(0, entry.pick.length - 1)] : entry.i;
@@ -967,7 +973,7 @@ out.push(segText(" " + fmtShortTime(d.stats.playtimeMs), "#8fd0ff"));
 out.push(segText("   ", "#8a8a8a"));
 out.push(segIcon("fa-solid fa-swords", "#ff9a9a"));
 out.push(segText(" " + d.stats.kills + " K  " + d.stats.deaths + " D", "#ff9a9a"));
-const levelLine = [];
+const levelLine = ["Overall Lv" + levelFor(d.stats.xp) + " " + levelPercent(d.stats.xp) + "%"];
 for (const key in QUEST_TYPES) {
 const xp = skillOf(playerId, key).xp;
 levelLine.push(QUEST_TYPES[key].short + " Lv" + levelFor(xp) + " " + levelPercent(xp) + "%");
@@ -1005,6 +1011,7 @@ gameTitle(),
 fmtNum(d.shards) + " shards   #" + placeOf(playerId, "kills") + " kills",
 fmtShortTime(d.stats.playtimeMs) + "   " + d.stats.kills + " K  " + d.stats.deaths + " D",
 ];
+lines.push("Overall Lv" + levelFor(d.stats.xp) + " " + levelPercent(d.stats.xp) + "% " + levelBar(d.stats.xp));
 for (const key in QUEST_TYPES) {
 const xp = skillOf(playerId, key).xp;
 lines.push(QUEST_TYPES[key].short + " Lv" + levelFor(xp) + " " + levelPercent(xp) + "% " + levelBar(xp));
@@ -1275,11 +1282,12 @@ say(playerId, "  /giverskin <type> [skin|next] - change a giver's skin", "#fffff
 say(playerId, "  /diag - check givers, panel and recent errors", "#ffffff");
 say(playerId, "Text not showing colour? Test it with /style", "#5a5a5a");
 say(playerId, "Kill players, kill mobs and stay online to earn Void Shards.", "#8a8a8a");
+say(playerId, "  /level - overall level, and what gives XP", "#ffffff");
 }
 function cmdStats(playerId) {
 const d = ensure(playerId);
 const r = rankInfo(playerId);
-say(playerId, "Level " + levelFor(d.stats.xp) + "  |  " + fmtNum(d.stats.xp) + " XP  |  " + xpIntoLevel(d.stats.xp) + "/" + xpToNextLevel(d.stats.xp) + " to next", "#b48cff");
+say(playerId, "Overall level " + levelFor(d.stats.xp) + "  |  " + fmtNum(d.stats.xp) + " XP  |  " + xpIntoLevel(d.stats.xp) + "/" + xpToNextLevel(d.stats.xp) + " to next", "#b48cff");
 say(playerId, skillSummary(playerId), "#8a8a8a");
 richSay(playerId, [
 segIcon("fa-solid fa-user"),
@@ -2843,6 +2851,24 @@ d.stats.xp += Math.max(0, Math.floor(amount));
 const after = levelFor(d.stats.xp);
 return after > before ? after : 0;
 }
+function gainXp(playerId, amount) {
+const level = addXp(playerId, amount);
+if (!level) return 0;
+const d = P[playerId];
+saveNow(playerId);
+pushRightInfo(playerId);
+if (!d) return level;
+say(playerId, "Overall level " + level + "  |  " + xpIntoLevel(d.stats.xp) + "/" + xpToNextLevel(d.stats.xp) + " to level " + (level + 1), "#55ff55");
+try { api.playSound(playerId, "levelup", 1, 1); } catch (e) { }
+return level;
+}
+function cmdLevel(playerId) {
+const d = ensure(playerId);
+const level = levelFor(d.stats.xp);
+say(playerId, "Overall level " + level + "  |  " + fmtNum(d.stats.xp) + " XP", "#b48cff");
+say(playerId, levelBar(d.stats.xp) + "  " + xpIntoLevel(d.stats.xp) + "/" + xpToNextLevel(d.stats.xp) + " to level " + (level + 1), "#8a8a8a");
+say(playerId, "XP comes from kills, mobs, mining, fishing, crates, quests and time online.", "#5a5a5a");
+}
 const DISCORD_LINK = "https://discord.gg/crWR7Xx6bZ";
 const FANCY_TITLE = true;
 const GAME_TITLE = "VOIDBOUND SMP";
@@ -3366,6 +3392,7 @@ const d = ensure(attackingPlayer);
 d.stats.kills++;
 questProgress(attackingPlayer, "killing", 1);
 addShards(attackingPlayer, CFG.KILL_SHARDS, true);
+gainXp(attackingPlayer, CFG.XP_KILL);
 say(attackingPlayer, "Kill! +" + fmtNum(CFG.KILL_SHARDS) + " " + CFG.CURRENCY_NAME, "#ff6666");
 say(attackingPlayer, "Kills: " + d.stats.kills + "  |  Shards: " + fmtNum(d.shards), "#8a8a8a");
 };
@@ -3379,6 +3406,7 @@ const d = ensure(playerId);
 d.stats.mobKills++;
 questProgress(playerId, "hunting", 1);
 addShards(playerId, CFG.MOB_SHARDS, true);
+gainXp(playerId, CFG.XP_MOB);
 if (d.stats.mobKills % 100 === 0) {
 say(playerId, "Mob kills: " + d.stats.mobKills + "  |  +" + fmtNum(CFG.MOB_SHARDS) + " shards", "#55aaff");
 }
@@ -3386,12 +3414,14 @@ say(playerId, "Mob kills: " + d.stats.mobKills + "  |  +" + fmtNum(CFG.MOB_SHARD
 onPlayerSucceededFishCatch = function (playerId, rodName, x, y, z, caughtItemName) {
 if (!playerId) return;
 questProgress(playerId, "fishing", 1);
+gainXp(playerId, CFG.XP_FISH);
 };
 onPlayerChangeBlock = function (playerId, x, y, z, fromBlock, toBlock) {
 if (!playerId) return;
 if (String(toBlock) !== "Air") return;
 if (!fromBlock || String(fromBlock) === "Air") return;
 questProgress(playerId, "mining", 1);
+gainXp(playerId, CFG.XP_MINE);
 };
 onPlayerAltAction = function (playerId, x, y, z, block, targetEId) {
 if (!playerId) return;
@@ -3447,6 +3477,7 @@ if (minute > rt.minute) {
 const gained = minute - rt.minute;
 rt.minute = minute;
 addShards(id, CFG.SHARDS_PER_MINUTE * gained, true);
+gainXp(id, CFG.XP_MINUTE * gained);
 }
 }
 }
@@ -3530,6 +3561,11 @@ return false;
 renameHome(playerId, parseInt(args[1], 10) || 0, args.slice(2).join(" "));
 return false;
 }
+if (cmd === "level" || cmd === "lvl" || cmd === "xp") {
+cmdLevel(playerId);
+return false;
+}
+
 if (cmd === "spawn" || cmd === "lobby") {
 cmdLobby(playerId);
 return false;
