@@ -356,6 +356,17 @@ function ensure(playerId) {
     return P[playerId];
 }
 
+// Recent failures, shown by /diag. Boot catches its own errors, so one bad
+// API call can never leave the world half set up.
+const LAST_ERRORS = [];
+
+function noteError(where, e) {
+    const text = where + ": " + (e && e.message ? e.message : String(e));
+
+    LAST_ERRORS.push(text);
+    if (LAST_ERRORS.length > 10) LAST_ERRORS.shift();
+}
+
 function saveNow(playerId) {
     const d = P[playerId];
     if (!d) return;
@@ -1160,11 +1171,9 @@ function rightInfoText(playerId) {
         const giver = QUEST_TYPES[key];
         const xp = skillOf(playerId, key).xp;
 
-        out.push(segText("\n"));
-        out.push(segIcon(giver.icon, giver.colour));
-        out.push(segText(" " + giver.short + " Lv" + levelFor(xp), giver.colour));
-        out.push(segText("  " + levelPercent(xp) + "%", "#dddddd"));
-        out.push(segText("  " + levelBar(xp), "#5a5a5a"));
+        // One string per row: every segment carries its own style object, so
+        // fewer segments keeps the whole client option much smaller.
+        out.push(segText("\n" + giver.short + " Lv" + levelFor(xp) + "  " + levelPercent(xp) + "%  " + levelBar(xp), giver.colour));
     }
 
     // Whatever is currently being worked on, so the side panel answers
@@ -1347,6 +1356,7 @@ function cmdHelp(playerId) {
         say(playerId, "  /giverturn <type> [degrees] - aim a quest giver", "#ffffff");
     }
 
+    say(playerId, "  /diag - check givers, panel and recent errors", "#ffffff");
     say(playerId, "Text not showing colour? Test it with /style", "#5a5a5a");
     say(playerId, "Kill players, kill mobs and stay online to earn Void Shards.", "#8a8a8a");
 }
@@ -3091,11 +3101,13 @@ function yawTo(x, z, targetX, targetZ) {
 // size, and nothing attached on top. If a skin name is refused, the next one
 // in the list is tried and the last resort is a plain person, so a giver
 // always exists.
+// Only the documented head skin is used: an unknown cosmetic name makes the
+// engine refuse the call, which is what left givers missing before.
 const GIVER_LOOKS = {
-    fishing: { size: 1.1, heads: ["trader_blue", "trader_black"] },
-    hunting: { size: 0.95, heads: ["trader_piggy", "trader_black"] },
+    fishing: { size: 1.05, heads: ["trader_black"] },
+    hunting: { size: 0.9, heads: ["trader_black"] },
     mining: { size: 1.2, heads: ["trader_black"] },
-    killing: { size: 1.35, heads: ["trader_blue", "trader_black"] },
+    killing: { size: 1.35, heads: ["trader_black"] },
 };
 
 function createGiver(key) {
@@ -3112,7 +3124,10 @@ function createGiver(key) {
                 pose: "standing",
                 textures: { head: look.heads[i] },
             }, name);
-        } catch (e) { eId = null; }
+        } catch (e) {
+            noteError("giver " + key + " skin " + look.heads[i], e);
+            eId = null;
+        }
 
         if (eId) return eId;
     }
@@ -3122,7 +3137,10 @@ function createGiver(key) {
             size: look.size,
             pose: "standing",
         }, name);
-    } catch (e) { return null; }
+    } catch (e) {
+        noteError("giver " + key + " plain", e);
+        return null;
+    }
 }
 
 // Bloxd does not document which way yaw 0 faces for a mesh, and it can be
@@ -3161,6 +3179,31 @@ function applyGiverYaw(type) {
     if (!eId) return;
 
     try { api.setEntityRotation(eId, 0, giverYaw(type), 0); } catch (e) { }
+}
+
+function cmdDiag(playerId) {
+    const ids = [];
+
+    for (const key in QUEST_NPCS) ids.push(key + "=" + QUEST_NPCS[key]);
+
+    say(playerId, "VOIDBOUND DIAG", "#ffcc00");
+    say(playerId, "givers " + ids.length + "/4  " + (ids.join("  ") || "none spawned"), "#8a8a8a");
+    say(playerId, "side panel " + (PANEL_OFF[playerId] ? "hidden by /panel" : "on"), "#8a8a8a");
+
+    for (const key in QUEST_TYPES) {
+        say(playerId, "  " + key + " yaw " + Math.round(giverYaw(key)) + " nudge " + (GIVER_YAW[key] || 0), "#8a8a8a");
+    }
+
+    if (!LAST_ERRORS.length) {
+        say(playerId, "no errors recorded this session", "#55ff55");
+        return;
+    }
+
+    say(playerId, "last errors:", "#ff9a9a");
+
+    for (let i = Math.max(0, LAST_ERRORS.length - 6); i < LAST_ERRORS.length; i++) {
+        say(playerId, "  " + LAST_ERRORS[i], "#ff9a9a");
+    }
 }
 
 function cmdGiverTurn(playerId, args) {
@@ -3205,14 +3248,26 @@ function setupQuestGivers() {
         if (QUEST_NPCS[key]) continue;
 
         const giver = QUEST_TYPES[key];
-        const eId = createGiver(key);
+        let eId = null;
+
+        try {
+            eId = createGiver(key);
+        } catch (e) {
+            noteError("giver " + key, e);
+            eId = null;
+        }
 
         // null means the mesh entity limit was reached.
         if (!eId) continue;
 
         QUEST_NPCS[key] = eId;
 
-        try { api.setPosition(eId, giver.x, giver.y, giver.z); } catch (e) { }
+        try {
+            api.setPosition(eId, giver.x, giver.y, giver.z);
+        } catch (e) {
+            noteError("position " + key, e);
+        }
+
         applyGiverYaw(key);
     }
 }
@@ -3682,6 +3737,11 @@ playerCommand = function (playerId, command) {
         return false;
     }
 
+    if (cmd === "diag" || cmd === "diagnose") {
+        cmdDiag(playerId);
+        return false;
+    }
+
     if (cmd === "giverturn" || cmd === "faceturn") {
         cmdGiverTurn(playerId, args);
         return false;
@@ -3849,5 +3909,14 @@ loadLists();
 loadStaff();
 pruneStaff();
 setupStaffShop();
-loadGiverYaw();
-setupQuestGivers();
+try {
+    loadGiverYaw();
+} catch (e) {
+    noteError("giver yaw", e);
+}
+
+try {
+    setupQuestGivers();
+} catch (e) {
+    noteError("quest givers", e);
+}
