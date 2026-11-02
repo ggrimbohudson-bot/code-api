@@ -1,22 +1,20 @@
-// Regenerates one buy block per crate from the CRATES table in
-// ../voidbound-world-code.js, plus this folder's README table.
+// Writes one buy block per weapon from the WEAPONS table in
+// ../voidbound-world-code.js, plus this folder's README.
 //
-//   node crates/generate.js           write the files
-//   node crates/generate.js --check   fail if any file is out of date
+//   node weapons/generate.js           write the files
+//   node weapons/generate.js --check   fail if anything is out of date
 //
-// The world code is the only place crate prices and odds are written down, so
-// these files can never describe a crate that no longer exists.
+// The world code is the only place a weapon's price, stats and requirements
+// are written down, so a block here can never describe a weapon that changed.
 
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
 const root = path.resolve(__dirname, "..");
-const sourcePath = path.join(root, "voidbound-world-code.js");
-const src = fs.readFileSync(sourcePath, "utf8");
+const src = fs.readFileSync(path.join(root, "voidbound-world-code.js"), "utf8");
 
-// The world code boots when it loads, so it needs an api to talk to.
-function loadCrates() {
+function loadWeapons() {
     const db = {};
     const lobby = {};
     const noop = () => null;
@@ -44,31 +42,33 @@ function loadCrates() {
     };
 
     vm.createContext(ctx);
-    vm.runInContext(src + "\n;globalThis.__d={CRATES: CRATES, crateOdds: crateOdds, pctText: pctText};", ctx);
+    vm.runInContext(src + "\n;globalThis.__d={WEAPONS: WEAPONS};", ctx);
 
-    return ctx.__d;
+    return ctx.__d.WEAPONS;
 }
 
-const { CRATES, crateOdds, pctText } = loadCrates();
+const WEAPONS = loadWeapons();
 
-function oddsLines(crate) {
-    return crateOdds(crate).map((row) => "//   " + pctText(row.pct) + "  " + row.text);
+function commas(n) {
+    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-function crateFile(crate) {
+function hours(ms) {
+    const h = ms / 3600000;
+    return (h % 1 === 0 ? h : h.toFixed(1)) + "h";
+}
+
+function weaponFile(w) {
     const lines = [];
 
-    lines.push("// " + crate.name + " - " + crate.price + " Void Shards");
+    lines.push("// " + w.name + " - " + w.kind + " - " + commas(w.price) + " Void Shards");
+    lines.push("// D " + w.d + " damage | S " + w.s + " attack speed | C " + w.c + " critical damage");
     lines.push("//");
-    lines.push("// Everything this crate can pay, with the chance of each:");
-    lines.push.apply(lines, oddsLines(crate));
+    lines.push("// Unlocks at overall level " + w.level + ", " + w.kills + " player kills and " + hours(w.playtimeMs) + " played,");
+    lines.push("// then costs " + commas(w.price) + " Void Shards.");
     lines.push("//");
-    lines.push("// Buying is one call, so the price is only ever taken once. This world");
-    lines.push("// already sells it as /crate buy " + crate.id + ".");
-    lines.push("//");
-    lines.push("// Paste the block below where your own code should sell this crate:");
-    lines.push("//");
-    lines.push("//     buyCrateById(playerId, \"" + crate.id + "\");");
+    lines.push("// In game: /weapon buy " + w.id);
+    lines.push("// From your own code: buyWeaponById(playerId, \"" + w.id + "\");");
 
     return lines.join("\n") + "\n";
 }
@@ -76,33 +76,34 @@ function crateFile(crate) {
 function readme() {
     const lines = [];
 
-    lines.push("# Crate code blocks");
+    lines.push("# Weapon code blocks");
     lines.push("");
-    lines.push("No crate menu and no dealer: crates are sold by code. Each file in this");
-    lines.push("folder is the buy block for one crate, and every one of them ends in");
-    lines.push("`buyCrateById(playerId, \"<id>\")`, which lives in");
+    lines.push("One file per weapon, named after the weapon, ending in its buy call:");
+    lines.push("`buyWeaponById(playerId, \"<id>\")` in");
     lines.push("[voidbound-world-code.js](../voidbound-world-code.js).");
     lines.push("");
-    lines.push("In game the same call is reachable as `/crate buy <id>`, and `/crates`");
-    lines.push("lists every id. Because there is exactly one seller, the price is charged");
-    lines.push("once however a crate is bought.");
+    lines.push("In game the same call is `/weapon buy <id>`, and `/weapons` lists every");
+    lines.push("weapon with the price and what you still need. D is damage, S is attack");
+    lines.push("speed and C is critical damage.");
     lines.push("");
-    lines.push("| Crate | id | Price | Block |");
-    lines.push("|---|---|---|---|");
+    lines.push("| Weapon | Kind | D / S / C | Price | Unlocks at | Block |");
+    lines.push("|---|---|---|---|---|---|");
 
-    for (const crate of CRATES) {
-        lines.push("| " + crate.name + " | `" + crate.id + "` | " + crate.price + " | [crates/" + crate.id + ".js](" + crate.id + ".js) |");
+    for (const w of WEAPONS) {
+        lines.push("| " + w.name + " | " + w.kind + " | " + w.d + " / " + w.s + " / " + w.c + " | " +
+            commas(w.price) + " | level " + w.level + ", " + w.kills + " kills, " + hours(w.playtimeMs) + " | [" +
+            w.id + ".js](" + w.id + ".js) |");
     }
 
     lines.push("");
     lines.push("## Keeping them right");
     lines.push("");
-    lines.push("Prices, odds and names live only in the `CRATES` table of");
+    lines.push("Stats, prices and requirements live only in the `WEAPONS` table of");
     lines.push("`voidbound-world-code.js`. Regenerate these files from it:");
     lines.push("");
     lines.push("```");
-    lines.push("node crates/generate.js");
-    lines.push("node crates/generate.js --check");
+    lines.push("node weapons/generate.js");
+    lines.push("node weapons/generate.js --check");
     lines.push("```");
     lines.push("");
     lines.push("`--check` exits non-zero when a file here no longer matches the table.");
@@ -115,8 +116,8 @@ function wanted() {
 
     files.set(path.join(__dirname, "README.md"), readme());
 
-    for (const crate of CRATES) {
-        files.set(path.join(__dirname, crate.id + ".js"), crateFile(crate));
+    for (const w of WEAPONS) {
+        files.set(path.join(__dirname, w.id + ".js"), weaponFile(w));
     }
 
     return files;
@@ -137,11 +138,11 @@ for (const [file, content] of files) {
 
 if (check) {
     if (stale.length) {
-        console.error("Out of date: " + stale.join(", ") + " - run node crates/generate.js");
+        console.error("Out of date: " + stale.join(", ") + " - run node weapons/generate.js");
         process.exit(1);
     }
 
-    console.log("crates/: " + files.size + " files up to date");
+    console.log("weapons/: " + files.size + " files up to date");
 } else {
-    console.log("crates/: wrote " + files.size + " files");
+    console.log("weapons/: wrote " + files.size + " files");
 }

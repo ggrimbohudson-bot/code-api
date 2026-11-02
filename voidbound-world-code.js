@@ -64,192 +64,127 @@ mod: "mod", moderator: "mod", trial: "trial", trialmod: "trial",
 "trial-mod": "trial", helper: "trial", player: "player", none: "player",
 member: "player", default: "player",
 };
-const ARMOUR_SETS = {
-geo: ["Geo Helmet", "Geo Chestplate", "Geo Gauntlets", "Geo Leggings", "Geo Boots"],
-serpentite: ["Serpentite Helmet", "Serpentite Chestplate", "Serpentite Gauntlets", "Serpentite Leggings", "Serpentite Boots"],
-astral: ["Astral Helmet", "Astral Chestplate", "Astral Gauntlets", "Astral Leggings", "Astral Boots"],
-sanguine: ["Sanguine Helmet", "Sanguine Chestplate", "Sanguine Gauntlets", "Sanguine Leggings", "Sanguine Boots"],
-spectral: ["Spectral Helmet", "Spectral Chestplate", "Spectral Gauntlets", "Spectral Leggings", "Spectral Boots"],
-};
-const SPECTRAL_PIECES = ARMOUR_SETS.spectral;
-const TOOL_SETS = {
-starter: ["Stone Pickaxe", "Iron Pickaxe", "Stone Sword", "Iron Sword", "Iron Axe"],
-good: ["Diamond Pickaxe", "Diamond Sword", "Diamond Axe", "Moonstone Pickaxe", "Moonstone Axe", "Knight Sword"],
-serpentite: ["Serpentite Pickaxe", "Serpentite Axe", "Serpentite Sword", "Serpentite Hoe"],
-spectral: ["Spectral Sword", "Spectral Spear", "Spectral Dagger", "Spectral Mace"],
-};
-const GEAR_POOLS = {
-starter: ["Iron Sword", "Iron Pickaxe", "Gold Sword", "Iron Chestplate", "Gold Helmet"],
-mid: ["Diamond Sword", "Diamond Pickaxe", "Diamond Axe", "Gold Chestplate", "Diamond Bow"],
-rare: ["Knight Sword", "Diamond Chestplate", "Diamond Leggings", "Diamond Boots", "Diamond Bow"],
-elite: ["Knight Sword", "Diamond Chestplate", "Moonstone Pickaxe", "Moonstone Axe", "Diamond Bow", "Diamond Leggings"],
-};
-const CRATES = [
+const WEAPONS = [
 {
-id: "void",
-name: "Void Crate",
-price: 250,
-icon: "Obsidian",
-colour: "#b98cff",
-headline: "6% enchanted tools, 6% diamonds",
-blurb: "The starter gamble. Coal, diamonds and starter gear with a little enchant.",
-entries: [
-{ w: 44, r: "common", i: "Coal", ia: [8, 18] },
-{ w: 26, r: "uncommon", i: "Diamond Fragment", ia: [1, 3] },
-{ w: 18, r: "uncommon", label: "starter gear", pick: GEAR_POOLS.starter },
-{ w: 6, r: "rare", i: "Diamond", ia: [1, 2] },
-{ w: 6, r: "uncommon", pick: TOOL_SETS.starter, ench: [1, 1] },
-],
-},
-{
-id: "eclipse",
-name: "Eclipse Crate",
-price: 750,
-icon: "Moonstone",
-colour: "#8fd0ff",
-headline: "6% enchant 2 tools, 20% diamonds",
-blurb: "Mid tier. Coal by the stack, diamonds and real diamond gear.",
-entries: [
-{ w: 36, r: "common", i: "Coal", ia: [20, 40] },
-{ w: 28, r: "uncommon", i: "Diamond Fragment", ia: [4, 8] },
-{ w: 20, r: "rare", i: "Diamond", ia: [1, 3] },
-{ w: 10, r: "uncommon", label: "diamond gear", pick: GEAR_POOLS.mid },
-{ w: 6, r: "rare", pick: TOOL_SETS.good, ench: [2, 2] },
-],
-},
-{
-id: "geo",
-name: "Geo Crate",
-price: 1200,
-icon: "Geo Chestplate",
-colour: "#ffd75e",
-headline: "1% Geo armour, 2% Geo sword tools",
-blurb: "Geo country. Diamond gear and a 1% shot at Geo armour.",
-entries: [
-{ w: 42, r: "common", i: "Diamond Fragment", ia: [6, 12] },
-{ w: 24, r: "uncommon", i: "Diamond", ia: [2, 4] },
-{ w: 18, r: "uncommon", label: "diamond gear", pick: GEAR_POOLS.mid },
-{ w: 13, r: "rare", i: "Moonstone Fragment", ia: [1, 2] },
-{ w: 2, r: "rare", label: "Geo sword + starter tools", pick: TOOL_SETS.starter.concat(["Geo Sword"]), ench: [2, 2] },
-{ w: 1, r: "epic", pick: ARMOUR_SETS.geo, ench: [2, 2], announce: true },
-],
-},
-{
-id: "serpentite",
-name: "Serpentite Crate",
-price: 1800,
-icon: "Serpentite Sword",
-colour: "#55ff55",
-headline: "1% Serpentite armour, 1% Serpentite tools",
-blurb: "Snake-metal. Diamonds, moonstone and Serpentite at 1%.",
-entries: [
-{ w: 38, r: "common", i: "Diamond", ia: [3, 6] },
-{ w: 26, r: "uncommon", i: "Moonstone Fragment", ia: [2, 4] },
-{ w: 20, r: "uncommon", label: "diamond gear", pick: GEAR_POOLS.mid },
-{ w: 14, r: "rare", i: "Moonstone", ia: [1, 2] },
-{ w: 1, r: "rare", pick: TOOL_SETS.serpentite, ench: [2, 3] },
-{ w: 1, r: "epic", pick: ARMOUR_SETS.serpentite, ench: [2, 2], announce: true },
-],
-},
-{
-id: "nova",
-name: "Nova Crate",
-price: 2000,
-icon: "Diamond",
-colour: "#55ffff",
-headline: "5% enchant 3 tools, 13% moonstone",
-blurb: "High roller. Diamonds by the handful, moonstone and rare gear.",
-entries: [
-{ w: 32, r: "common", i: "Diamond", ia: [4, 8] },
-{ w: 24, r: "uncommon", i: "Moonstone Fragment", ia: [3, 6] },
-{ w: 20, r: "uncommon", label: "diamond gear", pick: GEAR_POOLS.mid },
-{ w: 13, r: "rare", i: "Moonstone", ia: [1, 2] },
-{ w: 6, r: "rare", label: "rare gear", pick: GEAR_POOLS.rare },
-{ w: 5, r: "rare", pick: TOOL_SETS.good, ench: [3, 3] },
-],
-},
-{
-id: "astral",
-name: "Astral Crate",
-price: 3600,
-icon: "Astral Sword",
-colour: "#b48cff",
-headline: "1% Astral armour, 2% Astral sword tools",
-blurb: "Star-metal. Moonstone, rare gear and a 1% Astral armour roll.",
-entries: [
-{ w: 30, r: "common", i: "Moonstone Fragment", ia: [4, 8] },
-{ w: 24, r: "uncommon", i: "Moonstone", ia: [2, 4] },
-{ w: 22, r: "uncommon", i: "Diamond", ia: [6, 12] },
-{ w: 18, r: "rare", label: "rare gear", pick: GEAR_POOLS.rare },
-{ w: 3, r: "rare", pick: TOOL_SETS.good, ench: [3, 3] },
-{ w: 2, r: "epic", label: "Astral sword + diamond tools", pick: TOOL_SETS.good.concat(["Astral Sword"]), ench: [3, 3] },
-{ w: 1, r: "epic", pick: ARMOUR_SETS.astral, ench: [3, 3], announce: true },
-],
-},
-{
-id: "mythic",
-name: "Mythic Crate",
-price: 5000,
-icon: "Moonstone Pickaxe",
-colour: "#ffcc00",
-headline: "4% enchant 4 tools, 18% elite gear",
-blurb: "Endgame crate. Moonstone, elite gear and level 4 tools.",
-entries: [
-{ w: 30, r: "common", i: "Moonstone", ia: [3, 6] },
-{ w: 24, r: "uncommon", i: "Moonstone Fragment", ia: [6, 10] },
-{ w: 20, r: "uncommon", i: "Diamond", ia: [8, 14] },
-{ w: 18, r: "rare", label: "elite gear", pick: GEAR_POOLS.elite },
-{ w: 4, r: "epic", pick: TOOL_SETS.good, ench: [4, 4] },
-{ w: 4, r: "epic", i: "Diamond Chestplate", ench: [3, 3] },
-],
-},
-{
-id: "sanguine",
-name: "Sanguine Crate",
-price: 8000,
-icon: "Sanguine Sword",
-colour: "#ff5555",
-headline: "1% Sanguine armour, 1% enchant 4 sword",
-blurb: "Blood-metal. Moonstone stacks, elite gear and Sanguine at 1%.",
-entries: [
-{ w: 28, r: "common", i: "Moonstone", ia: [4, 8] },
-{ w: 22, r: "uncommon", i: "Moonstone Fragment", ia: [8, 14] },
-{ w: 20, r: "uncommon", i: "Diamond", ia: [10, 18] },
-{ w: 20, r: "rare", label: "elite gear", pick: GEAR_POOLS.elite },
-{ w: 4, r: "epic", pick: TOOL_SETS.good, ench: [4, 4] },
-{ w: 4, r: "epic", i: "Diamond Chestplate", ench: [4, 4] },
-{ w: 1, r: "void", label: "Sanguine sword + diamond tools", pick: TOOL_SETS.good.concat(["Sanguine Sword"]), ench: [4, 4], announce: true },
-{ w: 1, r: "void", pick: ARMOUR_SETS.sanguine, ench: [4, 4], announce: true },
-],
-},
-{
-id: "voidbound",
-name: "Voidbound Crate",
-price: 25000,
-icon: "Spectral Sword",
-colour: "#d67bff",
-headline: "1% Spectral armour, 4% Spectral weapons",
-blurb: "The dealer's best. Elite gear, maxed enchantment and one in a hundred Spectral armour.",
-entries: [
-{ w: 26, r: "common", i: "Moonstone", ia: [8, 14] },
-{ w: 22, r: "uncommon", i: "Moonstone Fragment", ia: [12, 20] },
-{ w: 20, r: "uncommon", i: "Diamond", ia: [16, 24] },
-{ w: 19, r: "rare", label: "elite gear", pick: GEAR_POOLS.elite },
-{ w: 4, r: "epic", i: "Diamond Chestplate", ench: [3, 3] },
-{ w: 4, r: "epic", pick: TOOL_SETS.good, ench: [4, 4] },
-{ w: 4, r: "rare", pick: TOOL_SETS.spectral, ench: [5, 5], announce: true },
-{ w: 1, r: "void", pick: ARMOUR_SETS.spectral, ench: [5, 5], announce: true },
-],
+id: "killer",
+name: "Killer",
+kind: "sword",
+colour: "#ff9a9a",
+item: "Diamond Sword",
+d: 3,
+s: 3,
+c: 4,
+price: 2500,
+level: 3,
+kills: 25,
+playtimeMs: 7200000,
+blurb: "A fast, hard-hitting blade. The first real step up from diamond.",
 },
 ];
-const RARITY_COLOUR = {
-common: "#b0b0b0",
-void: "#b98cff",
-uncommon: "#55ff55",
-rare: "#55aaff",
-epic: "#d67bff",
-jackpot: "#ffcc00",
-};
+function weaponById(input) {
+const want = String(input === undefined || input === null ? "" : input).toLowerCase().replace(/[^a-z0-9]/g, "");
+if (!want) return null;
+for (let i = 0; i < WEAPONS.length; i++) {
+const w = WEAPONS[i];
+if (w.id === want) return w;
+if (String(w.name).toLowerCase().replace(/[^a-z0-9]/g, "") === want) return w;
+}
+return null;
+}
+function weaponPower(w) {
+return w.d + w.s + w.c;
+}
+function weaponEnchant(w) {
+return Math.max(1, Math.min(5, Math.round(weaponPower(w) / 3)));
+}
+function weaponOwned(playerId, w) {
+const d = P[playerId];
+return !!(d && d.stats && d.stats.weapons && d.stats.weapons[w.id]);
+}
+function ownedWeaponCount(playerId) {
+const d = P[playerId];
+if (!d || !d.stats || !d.stats.weapons) return 0;
+let n = 0;
+for (const id in d.stats.weapons) if (d.stats.weapons[id]) n++;
+return n;
+}
+function weaponShortfall(playerId, w) {
+const d = ensure(playerId);
+const out = [];
+const level = levelFor(d.stats.xp);
+if (level < w.level) out.push("level " + w.level + " (you are " + level + ")");
+if (d.stats.kills < w.kills) out.push(w.kills + " kills (you have " + d.stats.kills + ")");
+if (d.stats.playtimeMs < w.playtimeMs) out.push(fmtShortTime(w.playtimeMs) + " played (you have " + fmtShortTime(d.stats.playtimeMs) + ")");
+if (d.shards < w.price) out.push(fmtNum(w.price) + " " + CFG.CURRENCY_NAME + " (you have " + fmtNum(d.shards) + ")");
+return out;
+}
+function weaponStatsText(w) {
+return "D" + w.d + "  S" + w.s + "  C" + w.c;
+}
+function buyWeaponById(playerId, id) {
+const w = weaponById(id);
+if (!w) {
+say(playerId, "Unknown weapon \"" + String(id) + "\". /weapons lists them.", "#ff5555");
+return false;
+}
+const d = ensure(playerId);
+if (weaponOwned(playerId, w)) {
+say(playerId, "You already own the " + w.name + ".", "#ff5555");
+return false;
+}
+const missing = weaponShortfall(playerId, w);
+if (missing.length) {
+say(playerId, "The " + w.name + " needs " + missing.join(", ") + ".", "#ff5555");
+return false;
+}
+if (!takeShards(playerId, w.price)) {
+say(playerId, "You need " + fmtNum(w.price - d.shards) + " more " + CFG.CURRENCY_NAME + ".", "#ff5555");
+return false;
+}
+const gave = giveEnchanted(playerId, w.item, weaponEnchant(w));
+if (!gave) {
+addShards(playerId, w.price, true);
+say(playerId, "Inventory full - your shards were returned.", "#ffaa55");
+return false;
+}
+if (!d.stats.weapons) d.stats.weapons = {};
+d.stats.weapons[w.id] = true;
+saveNow(playerId);
+say(playerId, "Bought the " + w.name + " for " + fmtNum(w.price) + " " + CFG.CURRENCY_NAME + ".", w.colour);
+say(playerId, w.name + "  " + weaponStatsText(w) + "  (ench " + weaponEnchant(w) + ")", "#8fd0ff");
+gainXp(playerId, 25);
+return true;
+}
+function cmdWeapons(playerId) {
+const d = ensure(playerId);
+say(playerId, "WEAPONS", "#55aaff");
+say(playerId, "Level " + levelFor(d.stats.xp) + "  |  " + d.stats.kills + " kills  |  " + fmtShortTime(d.stats.playtimeMs) + " played  |  " + fmtNum(d.shards) + " " + CFG.CURRENCY_NAME, "#8a8a8a");
+for (let i = 0; i < WEAPONS.length; i++) {
+const w = WEAPONS[i];
+const owned = weaponOwned(playerId, w);
+const missing = weaponShortfall(playerId, w);
+say(playerId, "  " + w.name + " (" + w.kind + ") - " + fmtNum(w.price) + " " + CFG.CURRENCY_NAME + "  " + weaponStatsText(w), owned ? "#55ff55" : "#ffffff");
+say(playerId, "     " + (owned ? "owned" : missing.length ? "needs " + missing.join(", ") : "ready - /weapon buy " + w.id), owned ? "#55ff55" : missing.length ? "#8a8a8a" : "#ffd75e");
+}
+}
+function cmdWeaponInfo(playerId, want) {
+const w = weaponById(want);
+if (!w) {
+say(playerId, "Usage: /weapon info <weapon>  -  /weapons lists all of them.", "#ff5555");
+return;
+}
+say(playerId, w.name.toUpperCase() + "  -  " + w.kind + "  -  " + fmtNum(w.price) + " " + CFG.CURRENCY_NAME, w.colour);
+say(playerId, w.blurb, "#8a8a8a");
+say(playerId, "D" + w.d + " damage  |  S" + w.s + " attack speed  |  C" + w.c + " critical damage", "#8fd0ff");
+say(playerId, "Needs level " + w.level + ", " + w.kills + " kills, " + fmtShortTime(w.playtimeMs) + " played and " + fmtNum(w.price) + " " + CFG.CURRENCY_NAME + ".", "#8a8a8a");
+const missing = weaponShortfall(playerId, w);
+if (weaponOwned(playerId, w)) say(playerId, "You own this.", "#55ff55");
+else if (!missing.length) say(playerId, "Ready: /weapon buy " + w.id, "#ffd75e");
+else say(playerId, "Still needed: " + missing.join(", ") + ".", "#ffaa55");
+}
+function cmdBuyWeapon(playerId, args) {
+buyWeaponById(playerId, args[2]);
+}
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const P = {};    // playerId -> saved data
 const RT = {};   // playerId -> runtime only
@@ -279,8 +214,8 @@ deaths: 0,
 mobKills: 0,
 playtimeMs: 0,
 shardsEarned: 0,
-cratesOpened: 0,
 xp: 0,
+weapons: {},
 },
 quests: {},
 skills: {},
@@ -302,9 +237,13 @@ d.stats.kills = num(old.stats.kills);
 d.stats.deaths = num(old.stats.deaths);
 d.stats.mobKills = num(old.stats.mobKills);
 d.stats.shardsEarned = num(old.stats.shardsEarned);
-d.stats.cratesOpened = num(old.stats.cratesOpened);
 d.stats.playtimeMs = num(old.stats.playtimeMs);
 d.stats.xp = num(old.stats.xp);
+if (old.stats.weapons && typeof old.stats.weapons === "object") {
+for (const wid in old.stats.weapons) {
+if (old.stats.weapons[wid]) d.stats.weapons[wid] = true;
+}
+}
 }
 for (const type in QUEST_TYPES) {
 const skill = old.skills && old.skills[type];
@@ -780,74 +719,6 @@ d.shards -= cost;
 syncShards(playerId);
 return true;
 }
-function crateById(input) {
-const want = String(input || "").trim().toLowerCase();
-if (!want) return null;
-for (let i = 0; i < CRATES.length; i++) {
-const c = CRATES[i];
-if (c.id === want || c.name.toLowerCase() === want) return c;
-}
-const index = parseInt(want, 10);
-if (index >= 1 && index <= CRATES.length) return CRATES[index - 1];
-return null;
-}
-function rollEntry(crate) {
-let total = 0;
-for (let i = 0; i < crate.entries.length; i++) total += crate.entries[i].w;
-let roll = Math.random() * total;
-for (let i = 0; i < crate.entries.length; i++) {
-const e = crate.entries[i];
-roll -= e.w;
-if (roll <= 0) return e;
-}
-return crate.entries[crate.entries.length - 1];
-}
-function randInt(min, max) {
-const a = Math.floor(Number(min) || 0);
-const b = Math.floor(Number(max) || a);
-if (b <= a) return a;
-return a + Math.floor(Math.random() * (b - a + 1));
-}
-function openCrate(playerId, crate) {
-const d = ensure(playerId);
-const entry = rollEntry(crate);
-d.stats.cratesOpened++;
-gainXp(playerId, Math.max(5, Math.round(crate.price / 25)));
-const colour = RARITY_COLOUR[entry.r] || "#ffffff";
-say(playerId, "Opening " + crate.name + "...", "#9a9a9a");
-const chosen = entry.pick ? entry.pick[randInt(0, entry.pick.length - 1)] : entry.i;
-if (chosen) {
-const level = entry.ench ? randInt(entry.ench[0], entry.ench[1]) : 0;
-const amount = level ? 1 : randInt(entry.ia ? entry.ia[0] : 1, entry.ia ? entry.ia[1] : 1);
-let given = 0;
-if (level) {
-given = giveEnchanted(playerId, chosen, level);
-} else {
-try { given = api.giveItem(playerId, chosen, amount); } catch (e) { given = 0; }
-}
-if (!given) {
-const fallback = entry.fallback || (level ? Math.round(crate.price * 0.6) : 120 * amount);
-addShards(playerId, fallback, true);
-say(playerId, "Inventory full - converted to " + fmtNum(fallback) + " " + CFG.CURRENCY_NAME + ".", "#ffaa55");
-} else {
-say(playerId, "[" + entry.r.toUpperCase() + "] " + chosen + (level ? " - enchant " + level : " x" + given) + "!", colour);
-if (entry.announce || entry.r === "epic" || entry.r === "jackpot") {
-broadcast(nameOf(playerId) + " unboxed " + chosen + (level ? " (enchant " + level + ")" : "") + " from a " + crate.name + "!", colour);
-}
-}
-} else {
-const amount = randInt(entry.s[0], entry.s[1]);
-addShards(playerId, amount, true);
-say(playerId, "[" + entry.r.toUpperCase() + "] +" + fmtNum(amount) + " " + CFG.CURRENCY_NAME + "!", colour);
-if (entry.r === "jackpot") {
-broadcast(nameOf(playerId) + " hit the JACKPOT: " + fmtNum(amount) + " " + CFG.CURRENCY_NAME + " from a " + crate.name + "!", colour);
-}
-}
-try { api.playSound(playerId, "chestOpen", 1, 1); } catch (e) { }
-if (entry.announce || entry.r === "epic" || entry.r === "jackpot" || entry.r === "void") {
-try { api.playSound(playerId, "levelup", 1, 1); } catch (e) { }
-}
-}
 function giveEnchanted(playerId, itemName, level) {
 let attributes = null;
 try { attributes = api.createEnchantmentAttributesForItem(itemName, level); } catch (e) { noteError("enchant " + itemName, e); }
@@ -1249,9 +1120,9 @@ say(playerId, "  /lb [kills|shards|playtime] - leaderboard", "#ffffff");
 say(playerId, "  /stats - your profile", "#ffffff");
 say(playerId, "  /shards - balance", "#ffffff");
 say(playerId, "  /pay <player> <amount> - send shards", "#ffffff");
-say(playerId, "  /crates - crate list", "#ffffff");
-say(playerId, "  /crate buy <id> - buy and open a crate", "#ffffff");
-say(playerId, "  /crate info <id> - every payout and its chance", "#ffffff");
+say(playerId, "  /weapons - every weapon, price and requirements", "#ffffff");
+say(playerId, "  /weapon buy <id> - buy one", "#ffffff");
+say(playerId, "  /weapon info <id> - D, S, C and the cost", "#ffffff");
 say(playerId, "HOMES", "#55aaff");
 say(playerId, "  /home [1-" + HOME_SLOTS + "] - teleport home", "#ffffff");
 say(playerId, "  /sethome [1-" + HOME_SLOTS + "] - set a home here", "#ffffff");
@@ -1301,7 +1172,7 @@ richSay(playerId, rankLine);
 richSay(playerId, [
 segIcon("fa-solid fa-coins", "#ffd75e"), segText(" " + fmtNum(d.shards) + " " + CFG.CURRENCY_NAME, "#ffd75e"),
 segText("   ", "#8a8a8a"),
-segIcon("fa-solid fa-gem", "#b48cff"), segText(" " + d.stats.cratesOpened + " crates", "#b48cff"),
+segIcon("fa-solid fa-gem", "#b48cff"), segText(" " + ownedWeaponCount(playerId) + " weapons", "#b48cff"),
 ]);
 richSay(playerId, [
 segIcon("fa-solid fa-swords", "#ff9a9a"),
@@ -1420,52 +1291,6 @@ takeShards(playerId, amount);
 addShards(target, amount, true);
 say(playerId, "Paid " + fmtNum(amount) + " " + CFG.CURRENCY_NAME + " to " + nameOf(target) + ".", "#55ff55");
 say(target, nameOf(playerId) + " paid you " + fmtNum(amount) + " " + CFG.CURRENCY_NAME + ".", "#55ff55");
-}
-function cmdCrates(playerId) {
-const d = ensure(playerId);
-say(playerId, "VOIDBOUND CRATES", "#55aaff");
-say(playerId, "You have " + fmtNum(d.shards) + " " + CFG.CURRENCY_NAME + ".", "#ffff55");
-for (let i = 0; i < CRATES.length; i++) {
-const c = CRATES[i];
-const affordable = d.shards >= c.price;
-say(playerId,
-"  " + (i + 1) + ". " + c.name + " - " + fmtNum(c.price) + " shards" +
-(affordable ? "  [affordable]" : "  (need " + fmtNum(c.price - d.shards) + " more)"),
-affordable ? "#55ff55" : "#ffffff");
-say(playerId, "     " + c.headline, c.colour);
-say(playerId, "     " + c.blurb + "  (/crate info " + c.id + ")", "#8a8a8a");
-}
-}
-function cmdCrateInfo(playerId, want) {
-const crate = crateById(want);
-if (!crate) {
-say(playerId, "Usage: /crate info <crate>  -  /crates lists all nine.", "#ff5555");
-return;
-}
-const d = ensure(playerId);
-say(playerId, crate.name.toUpperCase() + "  -  " + fmtNum(crate.price) + " " + CFG.CURRENCY_NAME, crate.colour);
-say(playerId, crate.blurb, "#8a8a8a");
-say(playerId, crate.headline, crate.colour);
-const rows = crateOdds(crate);
-for (let i = 0; i < rows.length; i++) {
-const entry = rows[i].entry;
-say(playerId, crateOddsText(crate)[i], RARITY_COLOUR[rows[i].r] || "#ffffff");
-if (entry.pick && entry.pick.length > 1) {
-say(playerId, "          " + entry.pick.join(", "), "#8a8a8a");
-}
-}
-say(playerId, "Buy: /crate buy " + crate.id + "  -  or right-click the dealer.", "#8a8a8a");
-if (d.shards < crate.price) {
-say(playerId, "You need " + fmtNum(crate.price - d.shards) + " more " + CFG.CURRENCY_NAME + ".", "#ffaa55");
-}
-}
-function cmdBuyCrate(playerId, args) {
-const crate = crateById(args[2]);
-if (!crate) {
-say(playerId, "Unknown crate. Use /crates to see the list.", "#ff5555");
-return;
-}
-buyCrate(playerId, crate);
 }
 function cmdEvents(playerId, args) {
 const sub = (args[1] || "").toLowerCase();
@@ -2867,7 +2692,7 @@ const d = ensure(playerId);
 const level = levelFor(d.stats.xp);
 say(playerId, "Overall level " + level + "  |  " + fmtNum(d.stats.xp) + " XP", "#b48cff");
 say(playerId, levelBar(d.stats.xp) + "  " + xpIntoLevel(d.stats.xp) + "/" + xpToNextLevel(d.stats.xp) + " to level " + (level + 1), "#8a8a8a");
-say(playerId, "XP comes from kills, mobs, mining, fishing, crates, quests and time online.", "#5a5a5a");
+say(playerId, "XP comes from kills, mobs, mining, fishing, quests and time online.", "#5a5a5a");
 }
 const DISCORD_LINK = "https://discord.gg/crWR7Xx6bZ";
 const FANCY_TITLE = true;
@@ -3339,7 +3164,7 @@ if (d.firstJoin) {
 d.firstJoin = false;
 say(playerId, "WELCOME TO " + gameTitle(), "#55aaff");
 say(playerId, "Earn Void Shards from kills, mobs and playtime.", "#e0e0e0");
-say(playerId, "Spend them on crates: /crates   |   Quests: /quests", "#e0e0e0");
+say(playerId, "Spend them on weapons: /weapons   |   Quests: /quests", "#e0e0e0");
 say(playerId, "Events: /events  |  Updates: /updates  |  Help: /help", "#8a8a8a");
 say(playerId, "Discord: " + DISCORD_LINK, "#8fd0ff");
 } else {
@@ -3481,7 +3306,7 @@ gainXp(id, CFG.XP_MINUTE * gained);
 }
 }
 }
-const BUILD = "VB-CMD-4";
+const BUILD = "VB-WEAPON-5";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
@@ -3561,11 +3386,18 @@ return false;
 renameHome(playerId, parseInt(args[1], 10) || 0, args.slice(2).join(" "));
 return false;
 }
+if (cmd === "weapons" || cmd === "weapon") {
+const wsub = String(args[1] || "").toLowerCase();
+if (cmd === "weapons" || !wsub) cmdWeapons(playerId);
+else if (wsub === "buy") cmdBuyWeapon(playerId, args);
+else if (wsub === "info") cmdWeaponInfo(playerId, args[2]);
+else cmdWeaponInfo(playerId, args[1]);
+return false;
+}
 if (cmd === "level" || cmd === "lvl" || cmd === "xp") {
 cmdLevel(playerId);
 return false;
 }
-
 if (cmd === "spawn" || cmd === "lobby") {
 cmdLobby(playerId);
 return false;
@@ -3598,27 +3430,6 @@ return false;
 }
 if (cmd === "pay" || cmd === "send") {
 cmdPay(playerId, args);
-return false;
-}
-if (cmd === "crates") {
-cmdCrates(playerId);
-return false;
-}
-if (cmd === "crate" || cmd === "buycrate" || cmd === "buy") {
-const sub = (args[1] || "").toLowerCase();
-if (sub === "info" || sub === "odds" || sub === "chance" || sub === "chances") {
-cmdCrateInfo(playerId, args[2]);
-return false;
-}
-if (cmd === "buy") {
-cmdBuyCrate(playerId, ["crate", "buy", args[1]]);
-} else if ((args[1] || "").toLowerCase() === "buy" || (args[1] || "").toLowerCase() === "open") {
-cmdBuyCrate(playerId, ["crate", "buy", args[2]]);
-} else {
-const crate = crateById(args[1]);
-if (crate) cmdBuyCrate(playerId, ["crate", "buy", args[1]]);
-else say(playerId, "Usage: /crate buy <id>  - see /crates", "#ff5555");
-}
 return false;
 }
 if (cmd === "events" || cmd === "event") {
@@ -3711,95 +3522,6 @@ return false;
 }
 return false;
 };
-const POOL_LABELS = [
-{ pool: ARMOUR_SETS.geo, label: "Geo armour" },
-{ pool: ARMOUR_SETS.serpentite, label: "Serpentite armour" },
-{ pool: ARMOUR_SETS.astral, label: "Astral armour" },
-{ pool: ARMOUR_SETS.sanguine, label: "Sanguine armour" },
-{ pool: ARMOUR_SETS.spectral, label: "Spectral armour" },
-{ pool: TOOL_SETS.starter, label: "starter tools" },
-{ pool: TOOL_SETS.good, label: "diamond tools" },
-{ pool: TOOL_SETS.serpentite, label: "Serpentite tools" },
-{ pool: TOOL_SETS.spectral, label: "Spectral weapon" },
-{ pool: GEAR_POOLS.starter, label: "starter gear" },
-{ pool: GEAR_POOLS.mid, label: "diamond gear" },
-{ pool: GEAR_POOLS.rare, label: "rare gear" },
-{ pool: GEAR_POOLS.elite, label: "elite gear" },
-];
-function poolLabel(pool) {
-for (let i = 0; i < POOL_LABELS.length; i++) {
-if (POOL_LABELS[i].pool === pool) return POOL_LABELS[i].label;
-}
-return "tools";
-}
-function crateTotal(crate) {
-let total = 0;
-for (let i = 0; i < crate.entries.length; i++) total += crate.entries[i].w;
-return total || 1;
-}
-function crateChance(crate, entry) {
-return Math.round(entry.w / crateTotal(crate) * 1000) / 10;
-}
-function pctText(pct) {
-if (pct === Math.floor(pct)) return String(pct) + "%";
-return pct.toFixed(1) + "%";
-}
-function enchantText(ench) {
-if (!ench) return "";
-if (ench[0] === ench[1]) return "  ench " + ench[0];
-return "  ench " + ench[0] + "-" + ench[1];
-}
-function crateRowText(entry) {
-if (entry.pick) return (entry.label || poolLabel(entry.pick)) + enchantText(entry.ench);
-if (entry.i) {
-const range = entry.ia ? " x" + entry.ia[0] + "-" + entry.ia[1] : "";
-return entry.i + range + enchantText(entry.ench);
-}
-const lo = entry.s[0];
-const hi = entry.s[1];
-return (lo === hi ? fmtNum(lo) : fmtNum(lo) + "-" + fmtNum(hi)) + " " + CFG.CURRENCY_NAME;
-}
-function crateOdds(crate) {
-const rows = [];
-for (let i = 0; i < crate.entries.length; i++) {
-const entry = crate.entries[i];
-rows.push({
-entry: entry,
-r: entry.r,
-pct: crateChance(crate, entry),
-text: crateRowText(entry),
-});
-}
-return rows;
-}
-function crateOddsText(crate) {
-const rows = crateOdds(crate);
-const out = [];
-for (let i = 0; i < rows.length; i++) {
-out.push("  " + pctText(rows[i].pct) + "  " + rows[i].text);
-}
-return out;
-}
-function buyCrate(playerId, crate) {
-if (!crate) return false;
-const d = ensure(playerId);
-if (d.shards < crate.price) {
-say(playerId, "Need " + fmtNum(crate.price - d.shards) + " more " + CFG.CURRENCY_NAME + " for a " + crate.name + ".", "#ff5555");
-return false;
-}
-if (!takeShards(playerId, crate.price)) return false;
-say(playerId, "Opened a " + crate.name + " for " + fmtNum(crate.price) + " " + CFG.CURRENCY_NAME + ".", "#b98cff");
-openCrate(playerId, crate);
-return true;
-}
-function buyCrateById(playerId, id) {
-const crate = crateById(id);
-if (!crate) {
-say(playerId, "Unknown crate \"" + String(id) + "\". /crates lists all nine.", "#ff5555");
-return false;
-}
-return buyCrate(playerId, crate);
-}
 loadLists();
 loadStaff();
 pruneStaff();
