@@ -11,6 +11,9 @@ speed and C is critical damage.
 | Weapon | Kind | D / S / C | Price | Unlocks at | Block |
 |---|---|---|---|---|---|
 | Killer | sword | 3 / 3 / 4 | 2,500 | level 3, 25 kills, 2h | [killer.js](killer.js) |
+| Combo | whip | 2 / 5 / 2 | 3,500 | level 4, 40 kills, 3h | [combo.js](combo.js) |
+| Crit Killer | club | 2 / 3 / 5 | 4,500 | level 5, 60 kills, 4h | [critkiller.js](critkiller.js) |
+| Goblin | spear | 4 / 5 / 3 | 6,000 | level 6, 80 kills, 5h | [goblin.js](goblin.js) |
 
 ## Keeping them right
 

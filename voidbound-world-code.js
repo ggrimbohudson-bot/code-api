@@ -80,7 +80,274 @@ kills: 25,
 playtimeMs: 7200000,
 blurb: "A fast, hard-hitting blade. The first real step up from diamond.",
 },
+{
+id: "combo",
+name: "Combo",
+kind: "whip",
+colour: "#8fd0ff",
+item: "Diamond Sword",
+d: 2,
+s: 5,
+c: 2,
+price: 3500,
+level: 4,
+kills: 40,
+playtimeMs: 10800000,
+blurb: "A whip that never stops moving. Low damage, brutal attack speed.",
+},
+{
+id: "critkiller",
+name: "Crit Killer",
+kind: "club",
+colour: "#ffd75e",
+item: "Diamond Axe",
+d: 2,
+s: 3,
+c: 5,
+price: 4500,
+level: 5,
+kills: 60,
+playtimeMs: 14400000,
+blurb: "A club built for one thing: the critical hit.",
+},
+{
+id: "goblin",
+name: "Goblin",
+kind: "spear",
+colour: "#55ff55",
+item: "Diamond Sword",
+d: 4,
+s: 5,
+c: 3,
+price: 6000,
+level: 6,
+kills: 80,
+playtimeMs: 18000000,
+blurb: "A long spear with reach and speed. Goblin-made, goblin-named.",
+},
 ];
+const ARMOUR = [
+{
+id: "fighter",
+name: "Fighter",
+colour: "#c9c9c9",
+p: 3,
+h: 3,
+r: 3,
+price: 3000,
+level: 3,
+kills: 30,
+playtimeMs: 7200000,
+ability: { name: "Bloodlust", effect: "Damage", blurb: "Hits harder while the full set is worn." },
+},
+{
+id: "hunter",
+name: "Hunter",
+colour: "#55ff55",
+p: 4,
+h: 4,
+r: 4,
+price: 4000,
+level: 4,
+kills: 40,
+playtimeMs: 10800000,
+ability: { name: "Stalker", effect: "Speed", blurb: "Faster on foot while the full set is worn." },
+},
+{
+id: "elite",
+name: "Elite",
+colour: "#b48cff",
+p: 4,
+h: 2,
+r: 4,
+price: 5500,
+level: 5,
+kills: 50,
+playtimeMs: 14400000,
+ability: { name: "Second Wind", effect: "Health Regen", blurb: "Health keeps coming back while the full set is worn." },
+},
+{
+id: "king",
+name: "King",
+colour: "#ffd75e",
+p: 5,
+h: 3,
+r: 3,
+price: 7000,
+level: 6,
+kills: 60,
+playtimeMs: 18000000,
+ability: { name: "Royal Aura", effect: "Damage Reduction", blurb: "Takes less damage while the full set is worn." },
+},
+];
+const ARMOUR_PIECES = ["Military Helmet", "Military Chestplate", "Military Leggings", "Military Boots"];
+function armourById(input) {
+const want = String(input === undefined || input === null ? "" : input).toLowerCase().replace(/[^a-z0-9]/g, "");
+if (!want) return null;
+for (let i = 0; i < ARMOUR.length; i++) {
+const a = ARMOUR[i];
+if (a.id === want) return a;
+if (String(a.name).toLowerCase().replace(/[^a-z0-9]/g, "") === want) return a;
+}
+return null;
+}
+function armourEnchant(a) {
+return Math.max(1, Math.min(5, Math.round((a.p + a.h + a.r) / 3)));
+}
+function armourOwned(playerId, a) {
+const d = P[playerId];
+return !!(d && d.stats && d.stats.armour && d.stats.armour[a.id]);
+}
+function armourWorn(playerId) {
+const d = P[playerId];
+return d && d.stats ? String(d.stats.armourWorn || "") : "";
+}
+function armourStatsText(a) {
+return "P" + a.p + "  H" + a.h + "  R" + a.r;
+}
+function armourShortfall(playerId, a) {
+const d = ensure(playerId);
+const out = [];
+const level = levelFor(d.stats.xp);
+if (level < a.level) out.push("level " + a.level + " (you are " + level + ")");
+if (d.stats.kills < a.kills) out.push(a.kills + " kills (you have " + d.stats.kills + ")");
+if (d.stats.playtimeMs < a.playtimeMs) out.push(fmtShortTime(a.playtimeMs) + " played (you have " + fmtShortTime(d.stats.playtimeMs) + ")");
+if (d.shards < a.price) out.push(fmtNum(a.price) + " " + CFG.CURRENCY_NAME + " (you have " + fmtNum(d.shards) + ")");
+return out;
+}
+function applyArmourAbility(playerId, a) {
+if (!a || !a.ability) return false;
+try {
+api.applyEffect(playerId, a.ability.effect, 8);
+return true;
+} catch (e) {
+noteError("armour effect " + a.id, e);
+return false;
+}
+}
+function clearArmourAbility(playerId, a) {
+if (!a || !a.ability) return false;
+try {
+api.removeEffect(playerId, a.ability.effect);
+return true;
+} catch (e) {
+return false;
+}
+}
+function buyArmourById(playerId, id) {
+const a = armourById(id);
+if (!a) {
+say(playerId, "Unknown armour \"" + String(id) + "\". /armour lists them.", "#ff5555");
+return false;
+}
+const d = ensure(playerId);
+if (armourOwned(playerId, a)) {
+say(playerId, "You already own the " + a.name + " set.", "#ff5555");
+return false;
+}
+const missing = armourShortfall(playerId, a);
+if (missing.length) {
+say(playerId, "The " + a.name + " set needs " + missing.join(", ") + ".", "#ff5555");
+return false;
+}
+if (!takeShards(playerId, a.price)) {
+say(playerId, "You need " + fmtNum(a.price - d.shards) + " more " + CFG.CURRENCY_NAME + ".", "#ff5555");
+return false;
+}
+let givenPieces = 0;
+for (let i = 0; i < ARMOUR_PIECES.length; i++) {
+if (giveEnchanted(playerId, ARMOUR_PIECES[i], armourEnchant(a))) givenPieces++;
+}
+if (!givenPieces) {
+addShards(playerId, a.price, true);
+say(playerId, "Inventory full - your shards were returned.", "#ffaa55");
+return false;
+}
+if (!d.stats.armour) d.stats.armour = {};
+d.stats.armour[a.id] = true;
+saveNow(playerId);
+say(playerId, "Bought the " + a.name + " set for " + fmtNum(a.price) + " " + CFG.CURRENCY_NAME + ".", a.colour);
+say(playerId, a.name + "  " + armourStatsText(a) + "  (ench " + armourEnchant(a) + ")  " + givenPieces + "/4 pieces", "#8fd0ff");
+say(playerId, "Ability: " + a.ability.name + " - " + a.ability.blurb + " /armour wear " + a.id, a.colour);
+gainXp(playerId, 40);
+return true;
+}
+function wearArmour(playerId, id) {
+const a = armourById(id);
+if (!a) {
+say(playerId, "Usage: /armour wear <set>  -  /armour lists them.", "#ff5555");
+return false;
+}
+if (!armourOwned(playerId, a)) {
+say(playerId, "You do not own the " + a.name + " set yet. /armour buy " + a.id, "#ff5555");
+return false;
+}
+const d = ensure(playerId);
+const current = armourById(armourWorn(playerId));
+if (current && current.id !== a.id) clearArmourAbility(playerId, current);
+d.stats.armourWorn = a.id;
+applyArmourAbility(playerId, a);
+saveNow(playerId);
+say(playerId, "Wearing the " + a.name + " set. " + a.ability.name + ": " + a.ability.blurb, a.colour);
+return true;
+}
+function takeOffArmour(playerId) {
+const current = armourById(armourWorn(playerId));
+if (!current) {
+say(playerId, "You are not wearing a set.", "#ff5555");
+return false;
+}
+clearArmourAbility(playerId, current);
+P[playerId].stats.armourWorn = "";
+saveNow(playerId);
+say(playerId, "Took off the " + current.name + " set.", "#8a8a8a");
+return true;
+}
+function armourTick() {
+for (const id in P) {
+const worn = armourById(armourWorn(id));
+if (!worn) continue;
+const rt = RT[id] || (RT[id] = {});
+const now = Date.now();
+if (rt.armourAt && now - rt.armourAt < 4000) continue;
+rt.armourAt = now;
+applyArmourAbility(id, worn);
+}
+}
+function cmdArmour(playerId) {
+const d = ensure(playerId);
+const worn = armourById(armourWorn(playerId));
+say(playerId, "ARMOUR SETS", "#55aaff");
+say(playerId, "P protection  |  H health  |  R health regen", "#8a8a8a");
+say(playerId, "Wearing: " + (worn ? worn.name : "nothing"), worn ? worn.colour : "#8a8a8a");
+for (let i = 0; i < ARMOUR.length; i++) {
+const a = ARMOUR[i];
+const owned = armourOwned(playerId, a);
+const missing = armourShortfall(playerId, a);
+say(playerId, "  " + a.name + " set - " + fmtNum(a.price) + " " + CFG.CURRENCY_NAME + "  " + armourStatsText(a) + "  " + a.ability.name, owned ? "#55ff55" : "#ffffff");
+say(playerId, "     " + (owned ? "owned - /armour wear " + a.id : missing.length ? "needs " + missing.join(", ") : "ready - /armour buy " + a.id) + "  |  " + a.ability.blurb, owned ? "#55ff55" : missing.length ? "#8a8a8a" : "#ffd75e");
+}
+}
+function cmdArmourSub(playerId, args) {
+const sub = String(args[1] || "").toLowerCase();
+if (!sub) {
+cmdArmour(playerId);
+return;
+}
+if (sub === "buy") {
+buyArmourById(playerId, args.slice(2).join(" "));
+return;
+}
+if (sub === "wear" || sub === "equip") {
+wearArmour(playerId, args.slice(2).join(" "));
+return;
+}
+if (sub === "off" || sub === "remove") {
+takeOffArmour(playerId);
+return;
+}
+cmdArmour(playerId);
+}
 function weaponById(input) {
 const want = String(input === undefined || input === null ? "" : input).toLowerCase().replace(/[^a-z0-9]/g, "");
 if (!want) return null;
@@ -216,6 +483,8 @@ playtimeMs: 0,
 shardsEarned: 0,
 xp: 0,
 weapons: {},
+armour: {},
+armourWorn: "",
 },
 quests: {},
 skills: {},
@@ -244,6 +513,12 @@ for (const wid in old.stats.weapons) {
 if (old.stats.weapons[wid]) d.stats.weapons[wid] = true;
 }
 }
+if (old.stats.armour && typeof old.stats.armour === "object") {
+for (const aid in old.stats.armour) {
+if (old.stats.armour[aid]) d.stats.armour[aid] = true;
+}
+}
+if (typeof old.stats.armourWorn === "string") d.stats.armourWorn = old.stats.armourWorn;
 }
 for (const type in QUEST_TYPES) {
 const skill = old.skills && old.skills[type];
@@ -1123,6 +1398,9 @@ say(playerId, "  /pay <player> <amount> - send shards", "#ffffff");
 say(playerId, "  /weapons - every weapon, price and requirements", "#ffffff");
 say(playerId, "  /weapon buy <id> - buy one", "#ffffff");
 say(playerId, "  /weapon info <id> - D, S, C and the cost", "#ffffff");
+say(playerId, "  /armour - sets, P/H/R, prices and abilities", "#ffffff");
+say(playerId, "  /armour buy <set> - the full four piece set", "#ffffff");
+say(playerId, "  /armour wear <set> | /armour off", "#ffffff");
 say(playerId, "HOMES", "#55aaff");
 say(playerId, "  /home [1-" + HOME_SLOTS + "] - teleport home", "#ffffff");
 say(playerId, "  /sethome [1-" + HOME_SLOTS + "] - set a home here", "#ffffff");
@@ -3282,6 +3560,7 @@ boardAcc = 0;
 boardTick();
 }
 checkPortals(dt);
+armourTick();
 if (Date.now() - lastGiverAimAt > 30000) {
 lastGiverAimAt = Date.now();
 healGiverAims();
@@ -3306,7 +3585,7 @@ gainXp(id, CFG.XP_MINUTE * gained);
 }
 }
 }
-const BUILD = "VB-WEAPON-5";
+const BUILD = "VB-ARMOUR-6";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
@@ -3384,6 +3663,10 @@ say(playerId, "Usage: /renamehome <n> <name>", "#ff5555");
 return false;
 }
 renameHome(playerId, parseInt(args[1], 10) || 0, args.slice(2).join(" "));
+return false;
+}
+if (cmd === "armour" || cmd === "armor") {
+cmdArmourSub(playerId, args);
 return false;
 }
 if (cmd === "weapons" || cmd === "weapon") {
