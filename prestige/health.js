@@ -1,5 +1,5 @@
 // VOIDBOUND prestige - Health
-// 1 prestige shard = +5% max health. 40 shards = 300 HP.
+// 1 prestige shard = +5% max health, up to 10 shards (150 HP).
 //
 // Paste this into a code block. It reads the same save the world code writes,
 // so the number always matches what the Prestige menu at BloxdSeno shows.
@@ -14,7 +14,7 @@ try {
     data = null;
 }
 const p = (data && data.prestige) || {};
-const shards = Math.max(0, Math.floor(Number(p.health) || 0));
-const health = Math.round(100 * Math.min(3, 1 + 0.05 * shards));
+const shards = Math.min(10, Math.max(0, Math.floor(Number(p.health) || 0)));
+const health = Math.round(100 * (1 + 0.05 * shards));
 api.setClientOption(id, "maxHealth", health);
 api.sendMessage(id, "Prestige health: " + shards + " shards = " + health + " max HP");

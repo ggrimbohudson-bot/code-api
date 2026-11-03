@@ -1,5 +1,5 @@
 // VOIDBOUND prestige - Damage
-// 1 prestige shard = +5% damage dealt. 40 shards = +200% (x3).
+// 1 prestige shard = +5% damage dealt, up to 10 shards (+50%).
 //
 // Paste this into a code block. It reads the same save the world code writes,
 // so the number always matches what the Prestige menu at BloxdSeno shows.
@@ -14,7 +14,7 @@ try {
     data = null;
 }
 const p = (data && data.prestige) || {};
-const shards = Math.max(0, Math.floor(Number(p.damage) || 0));
-const mult = Math.min(3, 1 + 0.05 * shards);
+const shards = Math.min(10, Math.max(0, Math.floor(Number(p.damage) || 0)));
+const mult = 1 + 0.05 * shards;
 api.setClientOption(id, "dealingDamageMultiplier", mult);
 api.sendMessage(id, "Prestige damage: " + shards + " shards = x" + mult.toFixed(2) + " damage");
