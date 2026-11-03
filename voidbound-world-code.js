@@ -1077,6 +1077,7 @@ function boardColumns() {
 return {
 name: { displayName: "ℕ𝔸𝕄𝔼", sortPriority: 10 },
 level: { displayName: "𝕃𝔼𝕍𝔼𝕃 %", sortPriority: 9, sortOrder: "descending" },
+prestige: { displayName: "ℙℝ𝔼𝕊𝕋", sortPriority: 8.5, sortOrder: "descending" },
 kills: { displayName: "𝕂𝕀𝕃𝕃𝕊", sortPriority: 8, sortOrder: "descending" },
 shards: { displayName: "𝕊ℍ𝔸ℝ𝔻𝕊", sortPriority: 7, sortOrder: "descending" },
 hours: { displayName: "ℍ𝕆𝕌ℝ𝕊", sortPriority: 6, sortOrder: "descending" },
@@ -1097,6 +1098,7 @@ if (!d) return;
 const r = rankInfo(playerId);
 const row = {
 kills: d.stats.kills,
+prestige: prestigeData(playerId).count,
 level: levelPercent(d.stats.xp),
 shards: Math.floor(d.shards),
 hours: fmtHours(d.stats.playtimeMs),
@@ -1111,6 +1113,7 @@ rt.boardAt = now;
 try {
 api.setTargetedPlayerSettingForEveryone(playerId, "lobbyLeaderboardValues", {
 kills: row.kills,
+prestige: row.prestige,
 level: row.level,
 shards: row.shards,
 hours: row.hours,
@@ -1121,11 +1124,13 @@ api.setTargetedPlayerSettingForEveryone(playerId, "colorInLobbyLeaderboard", row
 } catch (e) { }
 }
 function boardKey(mode) {
+if (mode === "prestige" || mode === "prestiges" || mode === "p") return "prestige";
 if (mode === "shards" || mode === "coins" || mode === "money") return "shards";
 if (mode === "playtime" || mode === "time" || mode === "hours") return "playtime";
 return "kills";
 }
 function valueFor(d, key) {
+if (key === "prestige") return (d.prestige && d.prestige.count) || 0;
 if (key === "shards") return d.shards;
 if (key === "playtime") return d.stats.playtimeMs;
 return d.stats.kills;
@@ -1298,7 +1303,7 @@ say(playerId, "Lobby spawn.", "#8fd0ff");
 function cmdHelp(playerId) {
 say(playerId, "== " + gameTitle() + " ==", "#ffcc00");
 say(playerId, "ECONOMY", "#55aaff");
-say(playerId, "  /lb [kills|shards|playtime] - leaderboard", "#ffffff");
+say(playerId, "  /lb [kills|shards|playtime|prestige] - leaderboard", "#ffffff");
 say(playerId, "  /stats - your profile", "#ffffff");
 say(playerId, "  /shards - balance", "#ffffff");
 say(playerId, "  /pay <player> <amount> - send shards", "#ffffff");
@@ -1381,11 +1386,13 @@ segText("#" + placeOf(playerId, "playtime") + " playtime", "#8fd0ff"),
 ]);
 }
 function boardValueText(d, key) {
+if (key === "prestige") return String((d.prestige && d.prestige.count) || 0);
 if (key === "shards") return fmtNum(d.shards);
 if (key === "playtime") return fmtTime(d.stats.playtimeMs);
 return String(d.stats.kills);
 }
 function boardValueIcon(key) {
+if (key === "prestige") return "fa-solid fa-star";
 if (key === "shards") return "fa-solid fa-coins";
 if (key === "playtime") return "fa-solid fa-clock-rotate-left";
 return "fa-solid fa-swords";
@@ -1414,13 +1421,13 @@ return segs;
 function cmdLeaderboard(playerId, mode) {
 const key = boardKey(mode);
 const rows = rankedBy(key);
-const label = key === "shards" ? "VOID SHARDS" : key === "playtime" ? "PLAYTIME" : "KILLS";
+const label = key === "prestige" ? "PRESTIGES" : key === "shards" ? "VOID SHARDS" : key === "playtime" ? "PLAYTIME" : "KILLS";
 richSay(playerId, [
 segIcon("fa-solid fa-trophy", "#ffcc00"),
 segText(" VOIDBOUND LEADERBOARD ", "#ffcc00"),
 segText("| " + label, "#8a8a8a"),
 ]);
-say(playerId, onlineCount() + " online  |  top " + Math.min(CFG.TOP_N, rows.length) + "  |  /lb kills, shards, playtime", "#5a5a5a");
+say(playerId, onlineCount() + " online  |  top " + Math.min(CFG.TOP_N, rows.length) + "  |  /lb kills, shards, playtime, prestige", "#5a5a5a");
 if (!rows.length) {
 say(playerId, "  Nobody online to rank yet.", "#8a8a8a");
 return;
@@ -4150,7 +4157,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-PRESTIGE-16";
+const BUILD = "VB-PRESTIGE-17";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
