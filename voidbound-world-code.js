@@ -1306,7 +1306,7 @@ say(playerId, "No hitting in the lobby or at the black portal.", "#8a8a8a");
 say(playerId, "QUESTS", "#55aaff");
 say(playerId, "  /quests - your quests and XP", "#ffffff");
 say(playerId, "  /quest <fishing|hunting|mining|killing> - talk to a giver", "#ffffff");
-say(playerId, "  Givers: xVexx the Angler, TECMAN_ the Monster Hunter, BloxdSeno the Assassin, ItzKasaiXYT the Killer.", "#8a8a8a");
+say(playerId, "  Givers: xVexx the Angler, TECMAN_ the Monster Hunter, Conceptual the Assassin, ItzKasaiXYT the Killer.", "#8a8a8a");
 say(playerId, "SERVER", "#55aaff");
 say(playerId, "  /events - scheduled events", "#ffffff");
 say(playerId, "  /event idea <text> - propose an event", "#ffffff");
@@ -3199,7 +3199,7 @@ endless: { name: "Open Contract", need: 55, step: 20, shards: 560, shardStep: 10
 x: 9991, y: -9999, z: 10009,
 },
 mining: {
-name: "Mining", short: "Mining", title: "Assassin", who: "BloxdSeno", icon: "fa-solid fa-hammer", colour: "#c9c9c9",
+name: "Mining", short: "Mining", title: "Assassin", who: "Conceptual", icon: "fa-solid fa-hammer", colour: "#c9c9c9",
 verb: "Mine", unit: "blocks",
 chain: [
 questStep("Silent Entry", 25, 120, 45, "Open a hole nobody hears. Twenty five blocks."),
