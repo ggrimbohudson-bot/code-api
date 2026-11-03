@@ -1306,6 +1306,7 @@ say(playerId, "No hitting in the lobby or at the black portal.", "#8a8a8a");
 say(playerId, "QUESTS", "#55aaff");
 say(playerId, "  /quests - your quests and XP", "#ffffff");
 say(playerId, "  /quest <fishing|hunting|mining|killing> - talk to a giver", "#ffffff");
+say(playerId, "  Givers: xVexx the Angler, TECMAN_ the Monster Hunter, BloxdSeno the Assassin, ItzKasaiXYT the Killer.", "#8a8a8a");
 say(playerId, "SERVER", "#55aaff");
 say(playerId, "  /events - scheduled events", "#ffffff");
 say(playerId, "  /event idea <text> - propose an event", "#ffffff");
@@ -3169,37 +3170,56 @@ if (entry.step2) baseShopItem(entry.cat.key, entry.id + "_go", entry.step2.image
 for (let i = 0; i < cats.length; i++) baseShopItem(cats[i].key, "vb_cancel", "Moonstone Fragment");
 }
 const QUEST_CENTRE = [10000, -9999, 10000];
+function questStep(name, need, shards, xp, line) {
+return { name: name, need: need, shards: shards, xp: xp, line: line };
+}
 const QUEST_TYPES = {
 fishing: {
-name: "Fishing", short: "Fishing", title: "Angler", icon: "fa-solid fa-gem", colour: "#55ffff",
+name: "Fishing", short: "Fishing", title: "Angler", who: "xVexx", icon: "fa-solid fa-gem", colour: "#55ffff",
 verb: "Catch", unit: "fish",
-goal: 4, goalStep: 2, goalMax: 48,
-shards: 120, shardStep: 35, shardMax: 1200,
-xp: 50, xpStep: 15, xpMax: 400,
+chain: [
+questStep("First Cast", 3, 110, 45, "Three fish. Nothing fancy, just show me you can hold the rod."),
+questStep("Tide Reader", 7, 170, 65, "Read the water, not the sky. Seven fish, no excuses."),
+questStep("Deep Current", 12, 250, 95, "The fat ones hide in the deep current. Bring twelve up."),
+questStep("Void Marlin", 20, 360, 140, "Twenty fish and the Void Marlin will finally look at your hook."),
+],
+endless: { name: "Endless Tide", need: 28, step: 12, shards: 500, shardStep: 90, xp: 190, xpStep: 38, line: "The tide never stops and neither do you. Back to work." },
 x: 10009, y: -9999, z: 10009,
 },
 hunting: {
-name: "Monster Hunting", short: "Hunting", title: "Monster Hunter", icon: "fa-solid fa-skull", colour: "#ff9a9a",
+name: "Monster Hunting", short: "Hunting", title: "Monster Hunter", who: "TECMAN_", icon: "fa-solid fa-skull", colour: "#ff9a9a",
 verb: "Slay", unit: "mobs",
-goal: 10, goalStep: 5, goalMax: 150,
-shards: 140, shardStep: 40, shardMax: 1400,
-xp: 55, xpStep: 16, xpMax: 430,
+chain: [
+questStep("Cull the Herd", 5, 130, 50, "Five mobs. Start with the small ones and work up."),
+questStep("Pack Breaker", 12, 200, 75, "They hunt in packs. Break twelve of them apart."),
+questStep("Trophy Run", 22, 300, 110, "Twenty two kills and I will start believing you."),
+questStep("Apex Contract", 40, 430, 165, "Forty mobs. Then we go looking for the big one."),
+],
+endless: { name: "Open Contract", need: 55, step: 20, shards: 560, shardStep: 100, xp: 220, xpStep: 44, line: "Contracts never dry up out here. Keep the blade warm." },
 x: 9991, y: -9999, z: 10009,
 },
 mining: {
-name: "Mining", short: "Mining", title: "Miner", icon: "fa-solid fa-hammer", colour: "#c9c9c9",
+name: "Mining", short: "Mining", title: "Assassin", who: "BloxdSeno", icon: "fa-solid fa-hammer", colour: "#c9c9c9",
 verb: "Mine", unit: "blocks",
-goal: 30, goalStep: 10, goalMax: 320,
-shards: 130, shardStep: 38, shardMax: 1300,
-xp: 52, xpStep: 15, xpMax: 420,
+chain: [
+questStep("Silent Entry", 25, 120, 45, "Open a hole nobody hears. Twenty five blocks."),
+questStep("Sealed Tunnels", 60, 190, 70, "Dig it, then seal it. Sixty blocks and no trail."),
+questStep("Vault Breach", 110, 280, 105, "The vault floor is thin. One hundred and ten blocks."),
+questStep("No Witnesses", 180, 400, 150, "Leave nothing behind. One hundred and eighty blocks."),
+],
+endless: { name: "Clean Contract", need: 240, step: 80, shards: 520, shardStep: 95, xp: 200, xpStep: 40, line: "Every wall is a way in. Keep digging." },
 x: 9991, y: -9999, z: 9991,
 },
 killing: {
-name: "Player Kills", short: "Kills", title: "Duelist", icon: "fa-solid fa-swords", colour: "#ff5555",
+name: "Player Kills", short: "Kills", title: "Killer", who: "ItzKasaiXYT", icon: "fa-solid fa-swords", colour: "#ff5555",
 verb: "Kill", unit: "kills",
-goal: 2, goalStep: 1, goalMax: 20,
-shards: 200, shardStep: 50, shardMax: 1800,
-xp: 80, xpStep: 20, xpMax: 520,
+chain: [
+questStep("First Blood", 1, 160, 60, "One kill. Make it clean and make it count."),
+questStep("Body Count", 3, 240, 90, "Three kills. Do not waste my time on the easy ones."),
+questStep("Rampage", 6, 340, 125, "Six without dying and I will notice you."),
+questStep("Void Reaper", 10, 470, 175, "Ten kills. Then we talk about the good contracts."),
+],
+endless: { name: "Open Bounty", need: 14, step: 4, shards: 600, shardStep: 110, xp: 230, xpStep: 46, line: "The list is never empty. Pick a name." },
 x: 10009, y: -9999, z: 9991,
 },
 };
@@ -3317,11 +3337,11 @@ function giverNameTag(type) {
 const giver = QUEST_TYPES[type];
 const tag = GIVER_TAGS[type] || {};
 const mark = tag.mark || "";
-const title = String(giver.title).toUpperCase();
-const text = mark ? mark + " " + title + " " + mark : title;
+const who = String(giver.who || giver.title).toUpperCase();
+const text = mark ? mark + " " + who + " " + mark : who;
 return {
 content: [{ str: text, style: styleFor(giver.colour) }],
-subtitle: [{ str: tag.sub || "RIGHT-CLICK FOR A QUEST", style: styleFor("#8a8a8a") }],
+subtitle: [{ str: String(giver.title).toUpperCase() + " - " + (tag.sub || "RIGHT-CLICK FOR A QUEST"), style: styleFor("#8a8a8a") }],
 border: { colour: colourName(giver.colour), style: "glow" },
 };
 }
@@ -3361,7 +3381,7 @@ return best;
 function createGiver(key) {
 const giver = QUEST_TYPES[key];
 const look = GIVER_LOOKS[key] || { size: 1, heads: ["trader_black"] };
-const name = giver.title + " - right-click me";
+const name = giverLabel(key) + " - right-click me";
 for (let i = 0; i < look.heads.length; i++) {
 let eId = null;
 try {
@@ -3480,12 +3500,24 @@ applyGiverNameTag(key);
 function questSpec(type, done) {
 const giver = QUEST_TYPES[type];
 const step = Math.max(0, Math.floor(Number(done) || 0));
+if (step < giver.chain.length) {
+const quest = giver.chain[step];
+return { tier: step + 1, name: quest.name, line: quest.line, need: quest.need, shards: quest.shards, xp: quest.xp };
+}
+const tail = giver.endless;
+const extra = step - giver.chain.length;
 return {
 tier: step + 1,
-need: Math.min(giver.goalMax, giver.goal + giver.goalStep * step),
-shards: Math.min(giver.shardMax, giver.shards + giver.shardStep * step),
-xp: Math.min(giver.xpMax, giver.xp + giver.xpStep * step),
+name: tail.name,
+line: tail.line,
+need: tail.need + tail.step * extra,
+shards: tail.shards + tail.shardStep * extra,
+xp: tail.xp + tail.xpStep * extra,
 };
+}
+function giverLabel(type) {
+const giver = QUEST_TYPES[type];
+return giver.who + " the " + giver.title;
 }
 function skillOf(playerId, type) {
 const d = ensure(playerId);
@@ -3507,6 +3539,8 @@ const d = ensure(playerId);
 const spec = questSpec(type, skillOf(playerId, type).done);
 d.quests[type] = {
 tier: spec.tier,
+name: spec.name,
+line: spec.line,
 need: spec.need,
 have: 0,
 shards: spec.shards,
@@ -3528,8 +3562,8 @@ if (quest.have < quest.need) return;
 const giver = QUEST_TYPES[type];
 saveNow(playerId);
 pushRightInfo(playerId);
-say(playerId, "Quest complete: " + giver.verb + " " + quest.need + " " + giver.unit + ".", giver.colour);
-say(playerId, "Claim it with the " + giver.title + " for " + fmtNum(quest.shards) + " shards and " + quest.xp + " XP.", "#ffd75e");
+say(playerId, "Quest complete: " + (quest.name || giver.name) + " - " + giver.verb + " " + quest.need + " " + giver.unit + ".", giver.colour);
+say(playerId, "Claim it with " + giver.who + " for " + fmtNum(quest.shards) + " shards and " + quest.xp + " XP.", "#ffd75e");
 try { api.playSound(playerId, "levelup", 1, 1); } catch (e) { }
 }
 function questTalk(playerId, type) {
@@ -3540,17 +3574,18 @@ if (!quest) {
 const fresh = assignQuest(playerId, type);
 richSay(playerId, [
 segIcon(giver.icon, giver.colour),
-segText(" " + giver.title + ": ", giver.colour),
-segText(giver.verb + " " + fresh.need + " " + giver.unit + " for me.", "#e0e0e0"),
+segText(" " + giver.who + ": ", giver.colour),
+segText(fresh.name + " - " + giver.verb + " " + fresh.need + " " + giver.unit + ".", "#e0e0e0"),
 ]);
-say(playerId, "Tier " + fresh.tier + ". Reward: " + fmtNum(fresh.shards) + " shards + " + fresh.xp + " XP. Come back when it is done.", "#8a8a8a");
+if (fresh.line) say(playerId, fresh.line, "#8a8a8a");
+say(playerId, "Tier " + fresh.tier + " reward: " + fmtNum(fresh.shards) + " shards + " + fresh.xp + " XP. Come back when it is done.", "#8a8a8a");
 return;
 }
 if (quest.have < quest.need) {
 richSay(playerId, [
 segIcon(giver.icon, giver.colour),
-segText(" " + giver.title + ": ", giver.colour),
-segText(quest.have + "/" + quest.need + " " + giver.unit + " so far.", "#e0e0e0"),
+segText(" " + giver.who + ": ", giver.colour),
+segText((quest.name || giver.name) + " - " + quest.have + "/" + quest.need + " " + giver.unit + ".", "#e0e0e0"),
 ]);
 return;
 }
@@ -3569,12 +3604,13 @@ saveNow(playerId);
 pushRightInfo(playerId);
 richSay(playerId, [
 segIcon(giver.icon, giver.colour),
-segText(" Quest complete! ", "#55ff55"),
+segText(" " + giver.who + ": ", giver.colour),
+segText("Quest complete! ", "#55ff55"),
 segText("+" + fmtNum(shards) + " shards", "#ffd75e"),
 segText("  +" + xp + " XP", "#b48cff"),
 ]);
 say(playerId, giver.short + " level " + skillAfter + "  |  " + xpIntoLevel(skill.xp) + "/" + xpToNextLevel(skill.xp) + " to level " + (skillAfter + 1), "#8a8a8a");
-say(playerId, "Next quest: tier " + nextSpec.tier + " - " + giver.verb + " " + nextSpec.need + " " + giver.unit + " for " + fmtNum(nextSpec.shards) + " shards + " + nextSpec.xp + " XP.", "#5a5a5a");
+say(playerId, "Next: " + nextSpec.name + " (tier " + nextSpec.tier + ") - " + giver.verb + " " + nextSpec.need + " " + giver.unit + " for " + fmtNum(nextSpec.shards) + " shards + " + nextSpec.xp + " XP.", "#5a5a5a");
 if (skillAfter > skillBefore) {
 say(playerId, giver.name + " level up! You are now " + giver.short + " level " + skillAfter + ".", giver.colour);
 try { api.playSound(playerId, "levelup", 1, 1); } catch (e) { }
@@ -3611,8 +3647,8 @@ if (!quest) {
 const next = questSpec(key, skillOf(playerId, key).done);
 richSay(playerId, [
 segIcon(giver.icon, giver.colour),
-segText(" " + giver.title + " Lv" + lv + "  ", giver.colour),
-segText("tier " + next.tier + ": " + giver.verb + " " + next.need + " " + giver.unit, "#dddddd"),
+segText(" " + giver.who + " Lv" + lv + "  ", giver.colour),
+segText("T" + next.tier + " " + next.name + ": " + giver.verb + " " + next.need + " " + giver.unit, "#dddddd"),
 segText("  " + fmtNum(next.shards) + " shards + " + next.xp + " XP", "#ffd75e"),
 ]);
 continue;
@@ -3620,8 +3656,8 @@ continue;
 const done = quest.have >= quest.need;
 richSay(playerId, [
 segIcon(giver.icon, giver.colour),
-segText(" " + giver.title + " Lv" + lv + "  ", giver.colour),
-segText("T" + (quest.tier || 1) + " " + giver.verb + " " + quest.have + "/" + quest.need + " " + giver.unit, done ? "#55ff55" : "#dddddd"),
+segText(" " + giver.who + " Lv" + lv + "  ", giver.colour),
+segText("T" + (quest.tier || 1) + " " + (quest.name || giver.name) + "  " + giver.verb + " " + quest.have + "/" + quest.need + " " + giver.unit, done ? "#55ff55" : "#dddddd"),
 segText("  " + fmtNum(quest.shards) + " shards + " + quest.xp + " XP", "#ffd75e"),
 segText(done ? "  CLAIM" : "", "#55ff55"),
 ]);
@@ -3819,7 +3855,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-ZONES-11";
+const BUILD = "VB-QUEST-12";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
