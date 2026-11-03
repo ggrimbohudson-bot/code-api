@@ -269,7 +269,7 @@ METEOR_LAST_AT = Date.now() - CFG.METEOR_EVERY_MS;
 return false;
 }
 const loot = METEOR_LOOT.indexOf(String(m.loot)) >= 0 ? String(m.loot) : METEOR_LOOT[0];
-METEOR = { x: Math.round(mx), y: Math.round(my), z: Math.round(mz), loot: loot, at: isFinite(Number(m.at)) ? Number(m.at) : METEOR_LAST_AT, filled: !!m.filled, chest: [Math.round(mx), Math.round(my), Math.round(mz)] };
+METEOR = { x: Math.round(mx), y: Math.round(my), z: Math.round(mz), loot: loot, at: isFinite(Number(m.at)) ? Number(m.at) : METEOR_LAST_AT, filled: !!m.filled && !!m.stocked, stocked: !!m.stocked, chest: [Math.round(mx), Math.round(my), Math.round(mz)] };
 return true;
 }
 function meteorSetBlock(x, y, z, name) {
@@ -429,24 +429,55 @@ if (blockIsChest(blockNameAt(pos[0], pos[1], pos[2]))) return true;
 meteorSetBlock(pos[0], pos[1], pos[2], "Chest");
 return blockIsChest(blockNameAt(pos[0], pos[1], pos[2]));
 }
+function meteorChestSlot(idx) {
+try {
+const item = api.getStandardChestItemSlot(METEOR.chest, idx);
+if (item === undefined) return null;
+return item && item.name ? String(item.name) : "";
+} catch (e) {
+return null;
+}
+}
+function meteorChestWrite(idx, item, amount, attrs, playerId) {
+const pos = METEOR.chest;
+const sizes = amount ? [amount, null] : [null];
+for (let i = 0; i < sizes.length; i++) {
+let sent = false;
+try {
+if (attrs) api.setStandardChestItemSlot(pos, idx, item, sizes[i], playerId, attrs);
+else api.setStandardChestItemSlot(pos, idx, item, sizes[i], playerId);
+sent = true;
+} catch (e) {
+sent = false;
+}
+const read = meteorChestSlot(idx);
+if (read === item) return true;
+if (sent && read === null) return true;
+}
+return false;
+}
 function fillMeteorChest(playerId) {
 if (!METEOR || METEOR.filled || !playerId) return false;
 meteorEnsureChest();
 const attrs = meteorAttrs(METEOR.loot);
-try {
-if (attrs) api.setStandardChestItemSlot(METEOR.chest, 0, METEOR.loot, 1, playerId, attrs);
-else api.setStandardChestItemSlot(METEOR.chest, 0, METEOR.loot, 1, playerId);
+const lootOk = meteorChestWrite(0, METEOR.loot, 1, attrs, playerId);
 for (let i = 0; i < METEOR_EXTRAS.length; i++) {
 const extra = METEOR_EXTRAS[i];
-api.setStandardChestItemSlot(METEOR.chest, i + 1, extra.item, extra.amount, playerId);
+meteorChestWrite(i + 1, extra.item, extra.amount, null, playerId);
+}
+if (!lootOk) {
+let given = 0;
+try { given = api.giveItem(playerId, METEOR.loot, 1, attrs || undefined); } catch (e) { given = 0; }
+if (!given) {
+try { given = api.giveItem(playerId, METEOR.loot, 1); } catch (e) { given = 0; }
+}
+if (given > 0) say(playerId, "The crate jammed - " + METEOR.loot + " went straight into your inventory.", "#ff9c55");
+else noteError("meteor chest", new Error("crate refused every slot"));
 }
 METEOR.filled = true;
+METEOR.stocked = true;
 meteorSave();
 return true;
-} catch (e) {
-noteError("meteor chest", e);
-return false;
-}
 }
 function meteorSay(text, colour) {
 for (const id in P) say(id, text, colour);
@@ -464,7 +495,7 @@ return false;
 }
 meteorClearChest(METEOR);
 const loot = METEOR_LOOT[Math.floor(Math.random() * METEOR_LOOT.length)];
-METEOR = { x: spot.x, y: spot.y, z: spot.z, loot: loot, at: Date.now(), filled: false, forced: forced, chest: [spot.x, spot.y, spot.z] };
+METEOR = { x: spot.x, y: spot.y, z: spot.z, loot: loot, at: Date.now(), filled: false, stocked: false, forced: forced, chest: [spot.x, spot.y, spot.z] };
 METEOR_LAST_AT = METEOR.at;
 buildMeteor(METEOR);
 meteorSave();
@@ -4741,7 +4772,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-RTP-1";
+const BUILD = "VB-METEOR-6";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
