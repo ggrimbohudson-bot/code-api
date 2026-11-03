@@ -15,6 +15,9 @@ BOARD_EVERY_MS: 4000,
 PORTAL_CHECK_MS: 400,
 PORTAL_COOLDOWN_MS: 4000,
 BLACK_PORTAL_DEST: [50000.5, 60001, 49999.5],
+ARENA_DEST: [9038.5, 9990, 9719.5],
+ARENA_GRACE_MS: 5000,
+ARENA_GRACE_EFFECT: "Damage Reduction",
 GIVER_TALK_RANGE: 5,
 RTP_CENTRE: [0, 0],
 RTP_MIN_DIST: 80,
@@ -1295,6 +1298,7 @@ say(playerId, "  /rewards claim - take everything ready", "#ffffff");
 if (hasPerm(playerId, "clearinv")) say(playerId, "  /clearinv <player> - empty a player's inventory", "#ffffff");
 say(playerId, "TRAVEL", "#55aaff");
 say(playerId, "  /spawn - back to the lobby", "#ffffff");
+say(playerId, "  Light blue portal - PVP arena with a 5s grace period", "#ffffff");
 say(playerId, "QUESTS", "#55aaff");
 say(playerId, "  /quests - your quests and XP", "#ffffff");
 say(playerId, "  /quest <fishing|hunting|mining|killing> - talk to a giver", "#ffffff");
@@ -1312,8 +1316,8 @@ const r = rankInfo(playerId);
 say(playerId, "STAFF (" + r.name + ")", r.colour);
 say(playerId, "  Press B or N - staff menu with every tool you can use", "#ffffff");
 say(playerId, "  /admin - text version of the same panel", "#ffffff");
-if (hasPerm(playerId, "level")) say(playerId, "  /givelevel <player> <levels>  |  /setlevel <player> <level>", "#ffffff");
-if (hasPerm(playerId, "shards")) say(playerId, "  /giveshards <player> <amount>  |  /takeshards <player> <amount>", "#ffffff");
+if (hasPerm(playerId, "level")) say(playerId, "  /givelevel <player|me> <levels>  |  /setlevel <player|me> <level>", "#ffffff");
+if (hasPerm(playerId, "shards")) say(playerId, "  /giveshards <player|me> <amount>  |  /takeshards <player|me> <amount>", "#ffffff");
 }
 say(playerId, "  /diag - check givers, panel and recent errors", "#ffffff");
 say(playerId, "Text not showing colour? Test it with /style", "#5a5a5a");
@@ -1538,20 +1542,32 @@ const current = levelFor(d.stats.xp);
 const want = Math.max(1, Math.min(1000, current + Math.floor(Number(levels) || 0)));
 return setOverallLevel(playerId, want);
 }
+function grantTarget(playerId, args) {
+const first = String(args[1] === undefined || args[1] === null ? "" : args[1]).trim();
+const second = String(args[2] === undefined || args[2] === null ? "" : args[2]).trim();
+const lower = first.toLowerCase();
+if (/^[0-9]+$/.test(first)) return { target: playerId, amount: first, raw: first };
+if (lower === "me" || lower === "self" || lower === nameOf(playerId).toLowerCase()) return { target: playerId, amount: second, raw: second };
+if (!first) return { target: playerId, amount: second, raw: "" };
+return { target: findPlayer(first), amount: second, raw: first };
+}
 function cmdLevelGrant(playerId, args, mode) {
 if (!hasPerm(playerId, "level")) {
 deny(playerId, "level");
 return;
 }
-const targetName = args[1];
-const amount = parseInt(args[2], 10);
-const usage = mode === "set" ? "Usage: /setlevel <player> <level>" : "Usage: /givelevel <player> <levels>";
-if (!targetName || !isFinite(amount) || amount < 0) {
+const pick = grantTarget(playerId, args);
+const amount = parseInt(pick.amount, 10);
+const usage = mode === "set" ? "Usage: /setlevel <player|me> <level>" : "Usage: /givelevel <player|me> <levels>";
+if (!pick.raw || !isFinite(amount) || amount < 0) {
 say(playerId, usage, "#ff5555");
 return;
 }
-const target = targetOrComplain(playerId, targetName);
-if (!target) return;
+const target = pick.target;
+if (!target) {
+say(playerId, "That player is not online.", "#ff5555");
+return;
+}
 if (amount > CFG.MAX_GRANT_LEVELS) {
 say(playerId, "Max is " + CFG.MAX_GRANT_LEVELS + " levels in one go.", "#ff5555");
 return;
@@ -1567,14 +1583,17 @@ if (!hasPerm(playerId, "shards")) {
 deny(playerId, "shards");
 return;
 }
-const targetName = args[1];
-const amount = parseInt(args[2], 10);
-if (!targetName || !isFinite(amount) || amount <= 0) {
-say(playerId, "Usage: /" + (take ? "takeshards" : "giveshards") + " <player> <amount>", "#ff5555");
+const pick = grantTarget(playerId, args);
+const amount = parseInt(pick.amount, 10);
+if (!pick.raw || !isFinite(amount) || amount <= 0) {
+say(playerId, "Usage: /" + (take ? "takeshards" : "giveshards") + " <player|me> <amount>", "#ff5555");
 return;
 }
-const target = targetOrComplain(playerId, targetName);
-if (!target) return;
+const target = pick.target;
+if (!target) {
+say(playerId, "That player is not online.", "#ff5555");
+return;
+}
 const cap = Math.min(amount, CFG.MAX_GRANT_SHARDS);
 const d = ensure(target);
 if (take) {
@@ -2078,6 +2097,34 @@ function isBlackPortal(name) {
 const text = String(name || "").toLowerCase();
 return text.indexOf("portal") !== -1 && text.indexOf("black") !== -1;
 }
+function isLightBluePortal(name) {
+const text = String(name || "").toLowerCase().replace(/[^a-z]/g, "");
+if (text.indexOf("portal") === -1) return false;
+return text.indexOf("lightblue") !== -1 || text.indexOf("cyan") !== -1;
+}
+function arenaPortalPlayer(playerId, now) {
+const dest = CFG.ARENA_DEST;
+try {
+api.setPosition(playerId, dest[0], dest[1], dest[2]);
+} catch (e) {
+noteError("arena portal", e);
+say(playerId, "The light blue portal fizzles.", "#ff5555");
+return false;
+}
+const stamp = now || Date.now();
+const rt = RT[playerId] || (RT[playerId] = {});
+rt.portalUntil = stamp + CFG.PORTAL_COOLDOWN_MS;
+rt.portalCell = null;
+rt.portalSeen = false;
+rt.arenaGraceUntil = stamp + CFG.ARENA_GRACE_MS;
+try {
+api.applyEffect(playerId, CFG.ARENA_GRACE_EFFECT, CFG.ARENA_GRACE_MS / 1000);
+} catch (e) {
+noteError("arena grace", e);
+}
+say(playerId, "PVP ARENA - " + Math.round(CFG.ARENA_GRACE_MS / 1000) + "s grace period, use it.", "#55aaff");
+return true;
+}
 function blackPortalPlayer(playerId, now) {
 const dest = CFG.BLACK_PORTAL_DEST;
 try {
@@ -2106,6 +2153,7 @@ if (rt.portalUntil && stamp < rt.portalUntil) continue;
 const hit = portalAtPlayer(id);
 if (!hit) continue;
 if (isBlackPortal(hit)) blackPortalPlayer(id, stamp);
+else if (isLightBluePortal(hit)) arenaPortalPlayer(id, stamp);
 else rtpPlayer(id, stamp);
 }
 }
@@ -2131,6 +2179,11 @@ if (isBlackPortal(near)) {
 const dest = CFG.BLACK_PORTAL_DEST;
 say(playerId, "  black portal -> " + dest[0] + ", " + dest[1] + ", " + dest[2], "#55ff55");
 }
+if (isLightBluePortal(near)) {
+const dest = CFG.ARENA_DEST;
+say(playerId, "  light blue portal -> arena " + dest[0] + ", " + dest[1] + ", " + dest[2] + "  " + Math.round(CFG.ARENA_GRACE_MS / 1000) + "s grace", "#55ff55");
+}
+say(playerId, "  arena grace: " + (rt.arenaGraceUntil && rt.arenaGraceUntil > Date.now() ? Math.ceil((rt.arenaGraceUntil - Date.now()) / 1000) + "s" : "none"), "#8a8a8a");
 say(playerId, "  ground here: " + (surface === null ? "none found" : surface), "#8a8a8a");
 say(playerId, "  apis: getBlock " + (typeof api.getBlock) + ", solidity " + (typeof api.getBlockSolidity), "#8a8a8a");
 say(playerId, "  cooldown: " + (rt.portalUntil && rt.portalUntil > Date.now() ? Math.ceil((rt.portalUntil - Date.now()) / 1000) + "s" : "ready"), "#8a8a8a");
@@ -2520,12 +2573,12 @@ say(playerId, "  /give <item> [amount] - give yourself items", "#ffffff");
 if (hasPerm(playerId, "level") || hasPerm(playerId, "shards")) {
 say(playerId, "ECONOMY", "#55aaff");
 if (hasPerm(playerId, "level")) {
-say(playerId, "  /givelevel <player> <levels> - add overall levels", "#ffffff");
-say(playerId, "  /setlevel <player> <level> - set an exact level", "#ffffff");
+say(playerId, "  /givelevel <player|me> <levels> - add overall levels, me for yourself", "#ffffff");
+say(playerId, "  /setlevel <player|me> <level> - set an exact level", "#ffffff");
 }
 if (hasPerm(playerId, "shards")) {
-say(playerId, "  /giveshards <player> <amount> - hand out Void Shards", "#ffffff");
-say(playerId, "  /takeshards <player> <amount> - claw shards back", "#ffffff");
+say(playerId, "  /giveshards <player|me> <amount> - hand out Void Shards, me for yourself", "#ffffff");
+say(playerId, "  /takeshards <player|me> <amount> - claw shards back", "#ffffff");
 }
 }
 say(playerId, "PLAYERS", "#55aaff");
@@ -3710,7 +3763,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-PANEL-9";
+const BUILD = "VB-ARENA-10";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
