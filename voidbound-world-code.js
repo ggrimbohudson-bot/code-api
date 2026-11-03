@@ -28,6 +28,18 @@ PRESTIGE_STAT_MAX: 10,
 PRESTIGE_MAX: 40,
 LEVEL_CAP: 1000,
 QUEST_XP_SHARE: 0.5,
+METEOR_EVERY_MS: 3600000,
+METEOR_KEY: "vb_meteor_v1",
+METEOR_RADIUS: 4500,
+METEOR_MIN_DIST: 600,
+METEOR_RING: 11,
+METEOR_FILL_RANGE: 48,
+METEOR_ENCHANT: 5,
+METEOR_TP_MIN: 250,
+METEOR_TP_MAX: 900,
+METEOR_TP_COOLDOWN_MS: 15000,
+WORLD_BORDER: 100000,
+TUTORIAL_GAP_MS: 9000,
 RTP_CENTRE: [0, 0],
 RTP_MIN_DIST: 80,
 RTP_RADIUS: 500,
@@ -197,6 +209,334 @@ ability: { name: "Royal Aura", effect: "Damage Reduction", blurb: "Takes less da
 },
 ];
 const ARMOUR_PIECES = ["Military Helmet", "Military Chestplate", "Military Leggings", "Military Boots"];
+const METEOR_PIECES = ["Amethite Helmet", "Amethite Chestplate", "Amethite Leggings", "Amethite Boots"];
+const METEOR_SWORD = "Amethite Sword";
+const METEOR_LOOT = [METEOR_PIECES[0], METEOR_PIECES[1], METEOR_PIECES[2], METEOR_PIECES[3], METEOR_SWORD];
+const METEOR_EFFECTS = ["Speed", "Damage", "Health Regen", "Damage Reduction"];
+const TUTORIAL_KEY = "vb_tutorial_v1";
+const TUTORIAL_STEPS = [
+{ name: "WELCOME", colour: "#55aaff", lines: ["Welcome to VOIDBOUND SMP - a short walkthrough runs while you settle in.", "Void Shards are the only currency: kills, mobs and playtime pay you.", "Check yourself with /stats, your quests with /quests and every command with /help."] },
+{ name: "GEAR", colour: "#55ff55", lines: ["/weapons shows every blade and its D, S and C, then /weapon buy <id>.", "/armour sells four piece sets - wear all four and the set ability switches on.", "Gear wears down as it saves you, so keep shards coming in."] },
+{ name: "QUESTS", colour: "#ffd75e", lines: ["Four givers wait in the lobby: xVexx, TECMAN_, Conceptual and ItzKasaiXYT.", "Right-click one, or type /quest fishing to take their job.", "Quests are the fastest XP in the game and they pay shards as well."] },
+{ name: "PRESTIGE", colour: "#b48cff", lines: ["Reach level " + CFG.LEVEL_CAP + ", then right-click BloxdSeno at 50011 60001 49999.", "Each prestige grants one shard: 10 shards per stat, +50% each.", "40 prestiges fills every stat, and the level cap lifts after that."] },
+{ name: "METEORS", colour: "#ff9c55", lines: ["A meteor falls once an hour, ringed in crystal with one piece of loot.", "/meteortp drops you within 1000 blocks of it - the chest fills as you arrive.", "The world border is 100000 blocks out on each side, so do not wander past it."] },
+{ name: "READY", colour: "#8fd0ff", lines: ["That is the whole game: earn, gear up, quest, prestige, hunt meteors.", "Ranks get the staff menu on B or N, and /panel hides the side panel.", "/tutorial next, /tutorial restart or /tutorial skip whenever you want."] },
+];
+let METEOR = null;
+let METEOR_LAST_AT = 0;
+const TUT = {};
+function meteorSave() {
+const payload = { last: METEOR_LAST_AT, meteor: METEOR };
+try { api.setLobbyDbValue(CFG.METEOR_KEY, JSON.stringify(payload)); } catch (e) { noteError("meteor save", e); }
+}
+function meteorLoad() {
+let raw = null;
+try { raw = api.getLobbyDbValue(CFG.METEOR_KEY); } catch (e) { raw = null; }
+METEOR = null;
+METEOR_LAST_AT = Date.now();
+if (!raw) return false;
+let data = null;
+try { data = typeof raw === "string" ? JSON.parse(raw) : raw; } catch (e) { data = null; }
+if (!data || typeof data !== "object") return false;
+const last = Number(data.last);
+if (isFinite(last) && last > 0) METEOR_LAST_AT = last;
+const m = data.meteor;
+if (!m || typeof m !== "object") return false;
+const mx = Number(m.x), my = Number(m.y), mz = Number(m.z);
+if (!isFinite(mx) || !isFinite(my) || !isFinite(mz)) return false;
+if (Math.abs(mx) > CFG.WORLD_BORDER || Math.abs(mz) > CFG.WORLD_BORDER) return false;
+const loot = METEOR_LOOT.indexOf(String(m.loot)) >= 0 ? String(m.loot) : METEOR_LOOT[0];
+METEOR = { x: Math.round(mx), y: Math.round(my), z: Math.round(mz), loot: loot, at: isFinite(Number(m.at)) ? Number(m.at) : METEOR_LAST_AT, filled: !!m.filled, chest: [Math.round(mx), Math.round(my), Math.round(mz)] };
+return true;
+}
+function meteorSetBlock(x, y, z, name) {
+try { api.setBlock(x, y, z, name); return true; } catch (e) { noteError("meteor block", e); return false; }
+}
+function meteorSpot() {
+for (let tries = 0; tries < 40; tries++) {
+const angle = Math.random() * Math.PI * 2;
+const dist = CFG.METEOR_MIN_DIST + Math.random() * (CFG.METEOR_RADIUS - CFG.METEOR_MIN_DIST);
+const x = Math.round(CFG.RTP_CENTRE[0] + Math.cos(angle) * dist);
+const z = Math.round(CFG.RTP_CENTRE[1] + Math.sin(angle) * dist);
+if (Math.abs(x) > CFG.WORLD_BORDER - 2000 || Math.abs(z) > CFG.WORLD_BORDER - 2000) continue;
+const y = findSurface(x, z);
+if (y !== null && y > CFG.RTP_MIN_Y) return { x: x, y: y, z: z };
+}
+return null;
+}
+function meteorClearChest(m) {
+if (!m || !m.chest) return;
+meteorSetBlock(m.chest[0], m.chest[1], m.chest[2], "Air");
+}
+function buildMeteor(m) {
+const radius = CFG.METEOR_RING;
+const steps = Math.max(48, radius * 8);
+for (let i = 0; i < steps; i++) {
+const angle = (i / steps) * Math.PI * 2;
+const bx = Math.round(m.x + Math.cos(angle) * radius);
+const bz = Math.round(m.z + Math.sin(angle) * radius);
+const by = findSurface(bx, bz);
+if (by === null) continue;
+meteorSetBlock(bx, by, bz, "Crystal Block");
+if (i % 12 === 0) {
+meteorSetBlock(bx, by + 1, bz, "Crystal Block");
+meteorSetBlock(bx, by + 2, bz, "Crystal Block");
+meteorSetBlock(bx, by + 3, bz, "Crystal Block");
+}
+}
+for (let dx = -4; dx <= 4; dx++) {
+for (let dz = -4; dz <= 4; dz++) {
+const ring = Math.abs(dx) + Math.abs(dz);
+if (ring > 5) continue;
+const by = findSurface(m.x + dx, m.z + dz);
+if (by === null) continue;
+meteorSetBlock(m.x + dx, by, m.z + dz, ring <= 2 ? "Obsidian" : "Crystal Block");
+}
+}
+for (let dy = 1; dy <= 5; dy++) meteorSetBlock(m.x, m.y + dy, m.z, "Air");
+m.chest = [m.x, m.y, m.z];
+meteorSetBlock(m.x, m.y, m.z, "Chest [R]");
+}
+function meteorAttrs(item) {
+try { return api.createEnchantmentAttributesForItem(item, CFG.METEOR_ENCHANT); } catch (e) { noteError("meteor enchant", e); return null; }
+}
+function fillMeteorChest(playerId) {
+if (!METEOR || METEOR.filled || !playerId) return false;
+const attrs = meteorAttrs(METEOR.loot);
+try {
+if (attrs) api.setStandardChestItemSlot(METEOR.chest, 0, METEOR.loot, 1, playerId, attrs);
+else api.setStandardChestItemSlot(METEOR.chest, 0, METEOR.loot, 1, playerId);
+METEOR.filled = true;
+meteorSave();
+return true;
+} catch (e) {
+noteError("meteor chest", e);
+return false;
+}
+}
+function meteorSay(text, colour) {
+for (const id in P) say(id, text, colour);
+}
+function spawnMeteor(byPlayer, quiet) {
+const spot = meteorSpot();
+if (!spot) {
+if (byPlayer) say(byPlayer, "No open ground for a meteor - try again.", "#ff5555");
+return false;
+}
+meteorClearChest(METEOR);
+const loot = METEOR_LOOT[Math.floor(Math.random() * METEOR_LOOT.length)];
+METEOR = { x: spot.x, y: spot.y, z: spot.z, loot: loot, at: Date.now(), filled: false, chest: [spot.x, spot.y, spot.z] };
+METEOR_LAST_AT = METEOR.at;
+buildMeteor(METEOR);
+meteorSave();
+if (!quiet) {
+meteorSay("A METEOR has fallen at " + METEOR.x + ", " + METEOR.z + " - crystal walls mark the crater.", "#ff9c55");
+meteorSay("One piece of loot waits inside. /meteortp drops you within " + fmtNum(CFG.METEOR_TP_MAX) + " blocks.", "#b48cff");
+}
+if (byPlayer) say(byPlayer, "Meteor spawned at " + METEOR.x + " " + METEOR.y + " " + METEOR.z + " holding " + METEOR.loot + ".", "#55ff55");
+return true;
+}
+function meteorTick() {
+const now = Date.now();
+if (!METEOR_LAST_AT) METEOR_LAST_AT = now;
+if (now - METEOR_LAST_AT >= CFG.METEOR_EVERY_MS) spawnMeteor(null, false);
+if (!METEOR || METEOR.filled) return;
+for (const id in P) {
+const spot = hereSpot(id);
+if (!spot) continue;
+if (Math.abs(spot.x - METEOR.x) > CFG.METEOR_FILL_RANGE || Math.abs(spot.z - METEOR.z) > CFG.METEOR_FILL_RANGE) continue;
+if (Math.abs(spot.y - METEOR.y) > 48) continue;
+if (fillMeteorChest(id)) {
+say(id, "The meteor chest unlocks as you reach the ring.", "#ff9c55");
+say(id, "Loot: " + METEOR.loot + " (enchanted " + CFG.METEOR_ENCHANT + "). One meteor, one piece.", "#b48cff");
+}
+break;
+}
+}
+function meteorPiecesOn(playerId) {
+let n = 0;
+for (let i = 0; i < METEOR_PIECES.length; i++) {
+let held = 0;
+try { held = api.getInventoryItemAmount(playerId, METEOR_PIECES[i]); } catch (e) { held = 0; }
+if (held > 0) n++;
+}
+return n;
+}
+function meteorAbilityTick() {
+for (const id in P) {
+const rt = RT[id] || (RT[id] = {});
+const full = meteorPiecesOn(id) >= METEOR_PIECES.length;
+if (full) {
+for (let i = 0; i < METEOR_EFFECTS.length; i++) {
+try { api.applyEffect(id, METEOR_EFFECTS[i], 8); } catch (e) { }
+}
+if (!rt.meteorOn) {
+rt.meteorOn = true;
+say(id, "METEOR CORE - full Amethite set: speed, damage, regeneration and damage reduction.", "#ff9c55");
+}
+} else if (rt.meteorOn) {
+rt.meteorOn = false;
+for (let i = 0; i < METEOR_EFFECTS.length; i++) {
+try { api.removeEffect(id, METEOR_EFFECTS[i]); } catch (e) { }
+}
+say(id, "Meteor Core faded - wear all four Amethite pieces to light it again.", "#8a8a8a");
+}
+}
+}
+function borderCheck() {
+const lim = CFG.WORLD_BORDER;
+for (const id in P) {
+const spot = hereSpot(id);
+if (!spot) continue;
+if (Math.abs(spot.x) <= lim && Math.abs(spot.z) <= lim) continue;
+const rt = RT[id] || (RT[id] = {});
+const now = Date.now();
+if (rt.borderAt && now - rt.borderAt < 3000) continue;
+rt.borderAt = now;
+const nx = Math.max(-lim, Math.min(lim, spot.x));
+const nz = Math.max(-lim, Math.min(lim, spot.z));
+try { api.setPosition(id, nx, spot.y, nz); } catch (e) { continue; }
+say(id, "The Void border turns you back at " + fmtNum(lim) + " blocks out.", "#ff5555");
+}
+}
+function cmdMeteorTp(playerId) {
+if (!METEOR) {
+say(playerId, "No meteor has fallen yet - one lands every hour.", "#8a8a8a");
+return false;
+}
+const rt = RT[playerId] || (RT[playerId] = {});
+const now = Date.now();
+if (rt.meteorTpAt && now - rt.meteorTpAt < CFG.METEOR_TP_COOLDOWN_MS) {
+say(playerId, "Meteor teleport ready in " + Math.ceil((CFG.METEOR_TP_COOLDOWN_MS - (now - rt.meteorTpAt)) / 1000) + "s.", "#ffaa55");
+return false;
+}
+for (let tries = 0; tries < 40; tries++) {
+const angle = Math.random() * Math.PI * 2;
+const dist = Math.round(CFG.METEOR_TP_MIN + Math.random() * (CFG.METEOR_TP_MAX - CFG.METEOR_TP_MIN));
+const x = Math.round(METEOR.x + Math.cos(angle) * dist);
+const z = Math.round(METEOR.z + Math.sin(angle) * dist);
+if (Math.abs(x) > CFG.WORLD_BORDER - 100 || Math.abs(z) > CFG.WORLD_BORDER - 100) continue;
+const y = findSurface(x, z);
+if (y === null) continue;
+try { api.setPosition(playerId, x, y, z); } catch (e) { continue; }
+rt.meteorTpAt = now;
+say(playerId, "Meteor drop: " + dist + " blocks from the crater, at " + METEOR.x + ", " + METEOR.z + ".", "#b48cff");
+say(playerId, "Follow the crystal ring. The chest holds one piece of the set.", "#8a8a8a");
+return true;
+}
+say(playerId, "No safe ground near the meteor - try /meteortp again.", "#ff5555");
+return false;
+}
+function meteorNextText() {
+const left = Math.max(0, METEOR_LAST_AT + CFG.METEOR_EVERY_MS - Date.now());
+const mins = Math.ceil(left / 60000);
+return mins + (mins === 1 ? " minute" : " minutes");
+}
+function cmdMeteor(playerId, args) {
+const sub = String(args[1] || "").toLowerCase();
+if (sub === "spawn" || sub === "now" || sub === "drop") {
+if (!isOwner(playerId)) return deny(playerId, "meteor");
+spawnMeteor(playerId, false);
+return false;
+}
+say(playerId, "METEOR", "#ff9c55");
+if (METEOR) {
+say(playerId, "  crater: " + METEOR.x + ", " + METEOR.z + (METEOR.filled ? "  (loot taken)" : "  (loot waiting)"), "#ffffff");
+} else {
+say(playerId, "  no meteor tracked yet", "#8a8a8a");
+}
+say(playerId, "  next meteor in " + meteorNextText() + " - one falls every hour", "#8a8a8a");
+say(playerId, "  /meteortp - land within " + fmtNum(CFG.METEOR_TP_MAX) + " blocks of it", "#ffffff");
+say(playerId, "  Full Amethite set = Meteor Core: speed, damage, regen and damage reduction", "#b48cff");
+if (isOwner(playerId)) say(playerId, "  /meteor spawn - drop one right now", "#ffffff");
+return false;
+}
+function tutorialState(playerId) {
+let st = TUT[playerId];
+if (st) return st;
+let raw = null;
+try { raw = api.getPlayerDbValue(playerId, TUTORIAL_KEY); } catch (e) { raw = null; }
+let step = 0, done = false, known = false;
+try {
+const data = raw ? (typeof raw === "string" ? JSON.parse(raw) : raw) : null;
+if (data && typeof data === "object") {
+const value = Number(data.step);
+step = isFinite(value) ? Math.max(0, Math.min(TUTORIAL_STEPS.length, Math.floor(value))) : 0;
+done = !!data.done;
+known = true;
+}
+} catch (e) { step = 0; done = false; known = false; }
+st = TUT[playerId] = { step: step, done: done, known: known, at: Date.now() };
+return st;
+}
+function tutorialSave(playerId) {
+const st = TUT[playerId];
+if (!st) return;
+try { api.setPlayerDbValue(playerId, TUTORIAL_KEY, JSON.stringify({ step: st.step, done: st.done })); } catch (e) { noteError("tutorial save", e); }
+}
+function tutorialShow(playerId, st) {
+if (st.step >= TUTORIAL_STEPS.length) return;
+const step = TUTORIAL_STEPS[st.step];
+say(playerId, "STARTER WALKTHROUGH  " + (st.step + 1) + "/" + TUTORIAL_STEPS.length + "  -  " + step.name, step.colour);
+for (let i = 0; i < step.lines.length; i++) say(playerId, "  " + step.lines[i], "#e0e0e0");
+}
+function tutorialStart(playerId) {
+const st = tutorialState(playerId);
+st.step = 0;
+st.done = false;
+st.at = Date.now();
+tutorialSave(playerId);
+tutorialShow(playerId, st);
+}
+function tutorialAdvance(playerId) {
+const st = tutorialState(playerId);
+if (st.done) return;
+st.step += 1;
+st.at = Date.now();
+if (st.step >= TUTORIAL_STEPS.length) {
+st.done = true;
+tutorialSave(playerId);
+say(playerId, "Walkthrough complete. /help lists everything, /tutorial restart brings it back.", "#55ff55");
+return;
+}
+tutorialSave(playerId);
+tutorialShow(playerId, st);
+}
+function tutorialTick() {
+const now = Date.now();
+for (const id in P) {
+const st = tutorialState(id);
+if (st.done) continue;
+if (now - st.at < CFG.TUTORIAL_GAP_MS) continue;
+tutorialAdvance(id);
+}
+}
+function cmdTutorial(playerId, args) {
+const sub = String(args[1] || "").toLowerCase();
+const st = tutorialState(playerId);
+if (sub === "skip" || sub === "stop" || sub === "off") {
+st.done = true;
+tutorialSave(playerId);
+say(playerId, "Walkthrough off. /tutorial restart whenever you want it again.", "#8a8a8a");
+return false;
+}
+if (sub === "restart" || sub === "start") {
+tutorialStart(playerId);
+return false;
+}
+if (sub === "next") {
+tutorialAdvance(playerId);
+return false;
+}
+if (st.done) {
+say(playerId, "Walkthrough finished. /tutorial restart replays it.", "#8a8a8a");
+return false;
+}
+say(playerId, "Walkthrough step " + Math.min(st.step + 1, TUTORIAL_STEPS.length) + " of " + TUTORIAL_STEPS.length + ".", "#8fd0ff");
+tutorialShow(playerId, st);
+say(playerId, "/tutorial next, /tutorial restart or /tutorial skip.", "#5a5a5a");
+return false;
+}
 function armourById(input) {
 const want = String(input === undefined || input === null ? "" : input).toLowerCase().replace(/[^a-z0-9]/g, "");
 if (!want) return null;
@@ -1267,6 +1607,10 @@ setupBoard(id);
 syncBoard(id);
 pushRightInfo(id);
 }
+meteorTick();
+meteorAbilityTick();
+borderCheck();
+tutorialTick();
 }
 function cmdBoardRefresh(playerId) {
 let count = 0;
@@ -1318,6 +1662,10 @@ say(playerId, "  /rewards claim - take everything ready", "#ffffff");
 if (hasPerm(playerId, "clearinv")) say(playerId, "  /clearinv <player> - empty a player's inventory", "#ffffff");
 say(playerId, "TRAVEL", "#55aaff");
 say(playerId, "  /spawn - back to the lobby", "#ffffff");
+say(playerId, "  /meteortp - drop near the hourly meteor, /meteor for its location", "#ffffff");
+say(playerId, "  /tutorial - replay the starter walkthrough", "#ffffff");
+if (isOwner(playerId)) say(playerId, "  /meteor spawn - drop a meteor now", "#ffffff");
+say(playerId, "The world border sits " + fmtNum(CFG.WORLD_BORDER) + " blocks out on each side.", "#8a8a8a");
 say(playerId, "  Light blue portal - PVP arena with a 5s grace period", "#ffffff");
 say(playerId, "Only the owner can break blocks within 100x100 of the arena or the black portal.", "#8a8a8a");
 say(playerId, "No hitting in the lobby or at the black portal.", "#8a8a8a");
@@ -3997,8 +4345,18 @@ say(playerId, "Earn Void Shards from kills, mobs and playtime.", "#e0e0e0");
 say(playerId, "Spend them on weapons: /weapons   |   Quests: /quests", "#e0e0e0");
 say(playerId, "Events: /events  |  Updates: /updates  |  Help: /help", "#8a8a8a");
 say(playerId, "Discord: " + DISCORD_LINK, "#8fd0ff");
+if (!tutorialState(playerId).done) tutorialStart(playerId);
 } else {
 say(playerId, "Welcome back, " + name + ". " + fmtNum(d.shards) + " " + CFG.CURRENCY_NAME + ".", "#55aaff");
+const st = tutorialState(playerId);
+if (!st.done) {
+if (!st.known) {
+tutorialStart(playerId);
+} else {
+st.at = Date.now();
+tutorialShow(playerId, st);
+}
+}
 }
 if (r.level > 0) {
 say(playerId, "Staff rank: " + r.name + "  |  Press B or N for your staff menu", r.colour);
@@ -4157,7 +4515,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-PRESTIGE-17";
+const BUILD = "VB-METEOR-1";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
@@ -4217,6 +4575,18 @@ return false;
 }
 if (cmd === "aim" || cmd === "seno" || cmd === "bloxdseno") {
 cmdAim(playerId, args);
+return false;
+}
+if (cmd === "meteortp" || cmd === "meteorteleport" || cmd === "mtp") {
+cmdMeteorTp(playerId);
+return false;
+}
+if (cmd === "meteor" || cmd === "meteors") {
+cmdMeteor(playerId, args);
+return false;
+}
+if (cmd === "tutorial" || cmd === "guide" || cmd === "walkthrough") {
+cmdTutorial(playerId, args);
 return false;
 }
 if (cmd === "level" || cmd === "lvl" || cmd === "xp") {
@@ -4385,6 +4755,11 @@ try {
 loadPrestigeYaw();
 } catch (e) {
 noteError("prestige yaw", e);
+}
+try {
+meteorLoad();
+} catch (e) {
+noteError("meteor load", e);
 }
 try {
 setupQuestGivers();
