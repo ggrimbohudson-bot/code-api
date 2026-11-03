@@ -10,7 +10,7 @@ XP_FISH: 4,
 XP_MINUTE: 2,
 CURRENCY_COLOUR: "blue",
 SAVE_EVERY_MS: 60000,
-PANEL_LIMIT: 2600,
+PANEL_LIMIT: 1300,
 BOARD_EVERY_MS: 4000,
 PORTAL_CHECK_MS: 400,
 PORTAL_COOLDOWN_MS: 4000,
@@ -1147,65 +1147,39 @@ out.push(part);
 return out;
 }
 function panelRule() {
-return segText("----------------", "#3f3f3f");
+return segText("────────────", "#3f3f3f");
+}
+function panelQuests(out, d) {
+for (const key in QUEST_TYPES) {
+const giver = QUEST_TYPES[key];
+const quest = d.quests[key];
+if (!quest) {
+out.push(segText("\n" + giver.short + "  -", "#5a5a5a"));
+continue;
+}
+const ready = quest.have >= quest.need;
+out.push(segText("\n" + giver.short + " " + quest.have + "/" + quest.need + (ready ? "  ✓" : ""), ready ? "#55ff55" : giver.colour));
+}
 }
 function rightInfoText(playerId) {
 const d = P[playerId];
 if (!d) return "";
 const r = rankInfo(playerId);
-const shown = nameOf(playerId);
 const nameColour = r.level > 0 ? r.colour : "#ffffff";
 const out = [];
-out.push(segIcon("fa-solid fa-diamond", "#ffcc00"));
-out.push(segText(" " + gameTitle(), "#ffcc00"));
-out.push(segIcon("fa-solid fa-diamond", "#ffcc00"));
-out.push(segText("\n"));
-out.push(segIcon(r.icon, nameColour));
-out.push(segText(" " + shown, nameColour));
-if (r.tag && r.level > 0) out.push(segText("  " + r.tag, r.colour));
-out.push(segText("\n"));
-out.push(panelRule());
-out.push(segText("\n"));
-out.push(segIcon("fa-solid fa-coins", "#ffd75e"));
-out.push(segText(" " + fmtNum(d.shards), "#ffd75e"));
-out.push(segText("   ", "#8a8a8a"));
-out.push(segIcon("fa-solid fa-trophy", "#c9c9c9"));
-out.push(segText(" #" + placeOf(playerId, "kills"), "#c9c9c9"));
-out.push(segText("\n"));
-out.push(segIcon("fa-solid fa-clock-rotate-left", "#8fd0ff"));
-out.push(segText(" " + fmtShortTime(d.stats.playtimeMs), "#8fd0ff"));
-out.push(segText("   ", "#8a8a8a"));
-out.push(segIcon("fa-solid fa-swords", "#ff9a9a"));
-out.push(segText(" " + d.stats.kills + "K " + d.stats.deaths + "D", "#ff9a9a"));
-out.push(segText("\n"));
-out.push(segIcon("fa-solid fa-gem", "#b48cff"));
-out.push(segText(" LV" + levelFor(d.stats.xp) + " " + levelPercent(d.stats.xp) + "%", "#b48cff"));
+out.push(segText("✦ " + gameTitle() + " ✦", "#ffcc00"));
+out.push(segText("\n" + nameOf(playerId) + (r.tag && r.level > 0 ? "  " + r.tag : ""), nameColour));
+out.push(segText("\n"), panelRule());
+out.push(segText("\n◈ " + fmtNum(d.shards) + "   ★ #" + placeOf(playerId, "kills"), "#ffd75e"));
+out.push(segText("\n◷ " + fmtShortTime(d.stats.playtimeMs) + "   ⚔ " + d.stats.kills + "K " + d.stats.deaths + "D", "#8fd0ff"));
 let skillLine = "";
-for (const key in QUEST_TYPES) {
-skillLine += QUEST_TYPES[key].short + " Lv" + levelFor(skillOf(playerId, key).xp) + "  ";
-}
-out.push(segText("   " + skillLine.trim(), "#c9a6ff"));
-out.push(segText("\n"));
-out.push(panelRule());
+for (const key in QUEST_TYPES) skillLine += QUEST_TYPES[key].short + " Lv" + levelFor(skillOf(playerId, key).xp) + "  ";
+out.push(segText("\n✦ LV" + levelFor(d.stats.xp) + " " + levelPercent(d.stats.xp) + "%  " + skillLine.trim(), "#b48cff"));
+out.push(segText("\n"), panelRule());
 out.push(segText("\nQUESTS", "#ffcc00"));
-for (const key in QUEST_TYPES) {
-const giver = QUEST_TYPES[key];
-const quest = d.quests[key];
-if (!quest) {
-out.push(segText("\n" + giver.short + ": talk to " + giver.title, "#5a5a5a"));
-continue;
-}
-const ready = quest.have >= quest.need;
-out.push(segText("\n" + giver.short + " T" + (quest.tier || 1) + "  " + quest.have + "/" + quest.need + (ready ? "  CLAIM" : ""), ready ? "#55ff55" : giver.colour));
-}
-if (LISTS.events.items.length) {
-out.push(segText("\n"));
-out.push(segIcon("fa-solid fa-flag", "#ffaa55"));
-out.push(segText(" " + LISTS.events.items[LISTS.events.items.length - 1].text.slice(0, 24), "#ffaa55"));
-}
-out.push(segText("\n"));
-out.push(segIcon("fa-solid fa-user-group", "#8fd0ff"));
-out.push(segText(" " + DISCORD_LINK.replace("https://", ""), "#8fd0ff"));
+panelQuests(out, d);
+if (LISTS.events.items.length) out.push(segText("\n⚑ " + LISTS.events.items[LISTS.events.items.length - 1].text.slice(0, 18), "#ffaa55"));
+out.push(segText("\n" + DISCORD_LINK.replace("https://", ""), "#8fd0ff"));
 out.push(segText("\nDo /cmd for commands", "#55ffff"));
 return compactSegments(out);
 }
@@ -1213,30 +1187,24 @@ function rightInfoPlain(playerId) {
 const d = P[playerId];
 if (!d) return "";
 const r = rankInfo(playerId);
-const lines = [
-">> " + gameTitle() + " <<",
-(r.tag ? "[" + r.tag + "] " : "") + nameOf(playerId),
-"------------------------------",
-fmtNum(d.shards) + " shards   #" + placeOf(playerId, "kills") + " kills",
-fmtShortTime(d.stats.playtimeMs) + "   " + d.stats.kills + " K  " + d.stats.deaths + " D",
-"------------------------------",
-"Overall Lv" + levelFor(d.stats.xp) + " " + levelPercent(d.stats.xp) + "% " + levelBar(d.stats.xp),
-];
-for (const key in QUEST_TYPES) {
-const xp = skillOf(playerId, key).xp;
-lines.push(QUEST_TYPES[key].short + " Lv" + levelFor(xp) + " " + levelPercent(xp) + "% " + levelBar(xp));
-}
-lines.push("------------------------------");
+const lines = [];
+lines.push("✦ " + gameTitle() + " ✦");
+lines.push(nameOf(playerId) + (r.tag && r.level > 0 ? "  " + r.tag : ""));
+lines.push("────────────");
+lines.push("Shards " + fmtNum(d.shards) + "   Rank #" + placeOf(playerId, "kills"));
+lines.push("Played " + fmtShortTime(d.stats.playtimeMs) + "   " + d.stats.kills + "K " + d.stats.deaths + "D");
+let skillLine = "";
+for (const key in QUEST_TYPES) skillLine += QUEST_TYPES[key].short + " Lv" + levelFor(skillOf(playerId, key).xp) + "  ";
+lines.push("Level " + levelFor(d.stats.xp) + " " + levelPercent(d.stats.xp) + "%  " + skillLine.trim());
+lines.push("────────────");
 lines.push("QUESTS");
 for (const key in QUEST_TYPES) {
+const giver = QUEST_TYPES[key];
 const quest = d.quests[key];
-if (!quest) continue;
-lines.push(QUEST_TYPES[key].short + " T" + (quest.tier || 1) + " " + quest.have + "/" + quest.need + " " + QUEST_TYPES[key].unit + (quest.have >= quest.need ? " CLAIM" : ""));
+lines.push(quest ? giver.short + " " + quest.have + "/" + quest.need + (quest.have >= quest.need ? "  ✓" : "") : giver.short + "  -");
 }
-if (LISTS.events.items.length) {
-lines.push("Event: " + LISTS.events.items[LISTS.events.items.length - 1].text.slice(0, 30));
-}
-lines.push(DISCORD_LINK);
+if (LISTS.events.items.length) lines.push("Event: " + LISTS.events.items[LISTS.events.items.length - 1].text.slice(0, 18));
+lines.push(DISCORD_LINK.replace("https://", ""));
 lines.push("Do /cmd for commands");
 return lines.join("\n");
 }
