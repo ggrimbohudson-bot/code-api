@@ -40,6 +40,10 @@ METEOR_TP_MAX: 120,
 METEOR_TP_COOLDOWN_MS: 15000,
 METEOR_FORCE_Y: 100,
 METEOR_FORCE_CLEAR: 12,
+METEOR_NEAR_MIN: 56,
+METEOR_NEAR_MAX: 200,
+METEOR_SKY_Y: 140,
+RTP_FLOOR_Y: 64,
 WORLD_BORDER: 100000,
 TUTORIAL_GAP_MS: 9000,
 RTP_CENTRE: [0, 0],
@@ -234,6 +238,7 @@ const TUTORIAL_STEPS = [
 ];
 let METEOR = null;
 let METEOR_LAST_AT = 0;
+let METEOR_TRY_AT = 0;
 const TUT = {};
 function meteorSave() {
 const payload = { last: METEOR_LAST_AT, meteor: METEOR };
@@ -255,6 +260,11 @@ if (!m || typeof m !== "object") return false;
 const mx = Number(m.x), my = Number(m.y), mz = Number(m.z);
 if (!isFinite(mx) || !isFinite(my) || !isFinite(mz)) return false;
 if (Math.abs(mx) > CFG.WORLD_BORDER || Math.abs(mz) > CFG.WORLD_BORDER) return false;
+if (Math.round(my) > CFG.METEOR_SKY_Y) {
+meteorWipeSky(Math.round(mx), Math.round(my), Math.round(mz));
+METEOR_LAST_AT = Date.now() - CFG.METEOR_EVERY_MS;
+return false;
+}
 const loot = METEOR_LOOT.indexOf(String(m.loot)) >= 0 ? String(m.loot) : METEOR_LOOT[0];
 METEOR = { x: Math.round(mx), y: Math.round(my), z: Math.round(mz), loot: loot, at: isFinite(Number(m.at)) ? Number(m.at) : METEOR_LAST_AT, filled: !!m.filled, chest: [Math.round(mx), Math.round(my), Math.round(mz)] };
 return true;
@@ -272,7 +282,12 @@ if (text.indexOf("sapling") >= 0) return true;
 if (text.indexOf("bamboo") >= 0) return true;
 return text.indexOf("vine") >= 0;
 }
+function meteorLoaded(x, y, z) {
+try { const loaded = api.isBlockInLoadedChunk(Math.floor(x), Math.floor(y), Math.floor(z)); if (typeof loaded === "boolean") return loaded; } catch (e) { }
+return true;
+}
 function meteorGround(x, z) {
+if (!meteorLoaded(x, CFG.RTP_FLOOR_Y, z)) return null;
 let y = CFG.RTP_TOP_Y;
 while (y > CFG.RTP_MIN_Y && !blockSolidAt(x, y, z)) y -= 1;
 if (y <= CFG.RTP_MIN_Y) return null;
@@ -282,12 +297,24 @@ y -= 1;
 }
 return null;
 }
+function meteorAnchors() {
+const out = [];
+for (const id in P) {
+const spot = hereSpot(id);
+if (spot && isFinite(spot.x) && isFinite(spot.z)) out.push(spot);
+}
+return out;
+}
 function meteorSpot() {
-for (let tries = 0; tries < 40; tries++) {
+const anchors = meteorAnchors();
+for (let tries = 0; tries < 24; tries++) {
+const base = anchors.length ? anchors[Math.floor(Math.random() * anchors.length)] : null;
+const minD = base ? CFG.METEOR_NEAR_MIN : CFG.METEOR_MIN_DIST;
+const maxD = base ? CFG.METEOR_NEAR_MAX : CFG.METEOR_RADIUS;
 const angle = Math.random() * Math.PI * 2;
-const dist = CFG.METEOR_MIN_DIST + Math.random() * (CFG.METEOR_RADIUS - CFG.METEOR_MIN_DIST);
-const x = Math.round(CFG.RTP_CENTRE[0] + Math.cos(angle) * dist);
-const z = Math.round(CFG.RTP_CENTRE[1] + Math.sin(angle) * dist);
+const dist = minD + Math.random() * (maxD - minD);
+const x = Math.round((base ? base.x : CFG.RTP_CENTRE[0]) + Math.cos(angle) * dist);
+const z = Math.round((base ? base.z : CFG.RTP_CENTRE[1]) + Math.sin(angle) * dist);
 if (Math.abs(x) > CFG.WORLD_BORDER - 2000 || Math.abs(z) > CFG.WORLD_BORDER - 2000) continue;
 const y = meteorGround(x, z);
 if (y !== null && y > CFG.RTP_MIN_Y) return { x: x, y: y, z: z };
@@ -295,20 +322,26 @@ if (y !== null && y > CFG.RTP_MIN_Y) return { x: x, y: y, z: z };
 return null;
 }
 function meteorTopSolid(x, z) {
+if (!meteorLoaded(x, CFG.RTP_FLOOR_Y, z)) return null;
 for (let y = CFG.RTP_TOP_Y; y > CFG.RTP_MIN_Y; y--) {
 if (blockSolidAt(x, y, z)) return y;
 }
 return null;
 }
 function meteorForceSite() {
-for (let tries = 0; tries < 40; tries++) {
+const anchors = meteorAnchors();
+for (let tries = 0; tries < 12; tries++) {
+const base = anchors.length ? anchors[Math.floor(Math.random() * anchors.length)] : null;
+const minD = base ? CFG.METEOR_NEAR_MIN : CFG.METEOR_MIN_DIST;
+const maxD = base ? CFG.METEOR_NEAR_MIN + 80 : CFG.METEOR_RADIUS;
 const angle = Math.random() * Math.PI * 2;
-const dist = CFG.METEOR_MIN_DIST + Math.random() * (CFG.METEOR_RADIUS - CFG.METEOR_MIN_DIST);
-const x = Math.round(CFG.RTP_CENTRE[0] + Math.cos(angle) * dist);
-const z = Math.round(CFG.RTP_CENTRE[1] + Math.sin(angle) * dist);
+const dist = minD + Math.random() * (maxD - minD);
+const x = Math.round((base ? base.x : CFG.RTP_CENTRE[0]) + Math.cos(angle) * dist);
+const z = Math.round((base ? base.z : CFG.RTP_CENTRE[1]) + Math.sin(angle) * dist);
 if (Math.abs(x) > CFG.WORLD_BORDER - 2000 || Math.abs(z) > CFG.WORLD_BORDER - 2000) continue;
 const top = meteorTopSolid(x, z);
-return { x: x, y: top === null ? CFG.METEOR_FORCE_Y : top + 1, z: z };
+if (top !== null) return { x: x, y: top + 1, z: z };
+if (base && isFinite(base.y)) return { x: x, y: Math.floor(base.y) + 1, z: z };
 }
 return null;
 }
@@ -324,6 +357,21 @@ meteorSetBlock(m.x + dx, m.y + dy, m.z + dz, dy === -1 ? (dist <= 4 ? "Obsidian"
 }
 }
 }
+function meteorWipeSky(x, y, z) {
+const radius = CFG.METEOR_RING;
+const steps = Math.max(48, radius * 8);
+for (let i = 0; i < steps; i++) {
+const angle = (i / steps) * Math.PI * 2;
+const bx = Math.round(x + Math.cos(angle) * radius);
+const bz = Math.round(z + Math.sin(angle) * radius);
+for (let dy = 0; dy <= 6; dy++) meteorSetBlock(bx, y + dy, bz, "Air");
+}
+for (let dx = -2; dx <= 2; dx++) {
+for (let dz = -2; dz <= 2; dz++) {
+for (let dy = 0; dy <= 3; dy++) meteorSetBlock(x + dx, y + dy, z + dz, "Air");
+}
+}
+}
 function meteorClearChest(m) {
 if (!m || !m.chest) return;
 meteorSetBlock(m.chest[0], m.chest[1], m.chest[2], "Air");
@@ -336,8 +384,8 @@ for (let i = 0; i < steps; i++) {
 const angle = (i / steps) * Math.PI * 2;
 const bx = Math.round(m.x + Math.cos(angle) * radius);
 const bz = Math.round(m.z + Math.sin(angle) * radius);
-const by = m.forced ? m.y : meteorGround(bx, bz);
-if (by === null) continue;
+let by = m.forced ? m.y : meteorGround(bx, bz);
+if (by === null) by = m.y;
 meteorSetBlock(bx, by, bz, "Crystal Block");
 if (i % 12 === 0) {
 meteorSetBlock(bx, by + 1, bz, "Crystal Block");
@@ -354,8 +402,8 @@ for (let dx = -4; dx <= 4; dx++) {
 for (let dz = -4; dz <= 4; dz++) {
 const ring = Math.abs(dx) + Math.abs(dz);
 if (ring > 5) continue;
-const by = meteorGround(m.x + dx, m.z + dz);
-if (by === null) continue;
+let by = meteorGround(m.x + dx, m.z + dz);
+if (by === null) by = m.y;
 meteorSetBlock(m.x + dx, by, m.z + dz, ring <= 2 ? "Obsidian" : "Crystal Block");
 for (let dy = 1; dy <= 6; dy++) {
 if (meteorFoliage(blockNameAt(m.x + dx, by + dy, m.z + dz))) meteorSetBlock(m.x + dx, by + dy, m.z + dz, "Air");
@@ -424,7 +472,11 @@ return true;
 function meteorTick() {
 const now = Date.now();
 if (!METEOR_LAST_AT) METEOR_LAST_AT = now;
-if (now - METEOR_LAST_AT >= CFG.METEOR_EVERY_MS) spawnMeteor(null, false);
+const online = Object.keys(P).length;
+if (online > 0 && now - METEOR_LAST_AT >= CFG.METEOR_EVERY_MS && now - METEOR_TRY_AT > 60000) {
+METEOR_TRY_AT = now;
+spawnMeteor(null, false);
+}
 if (!METEOR || METEOR.filled) return;
 for (const id in P) {
 const spot = hereSpot(id);
@@ -2760,6 +2812,7 @@ rt.portalSeen = !!hit;
 return hit;
 }
 function blockSolidAt(x, y, z) {
+if (!meteorLoaded(x, y, z)) return false;
 try {
 const solid = api.getBlockSolidity(Math.floor(x), Math.floor(y), Math.floor(z));
 if (typeof solid === "boolean") return solid;
@@ -4625,7 +4678,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-SFX-1";
+const BUILD = "VB-METEOR-4";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
