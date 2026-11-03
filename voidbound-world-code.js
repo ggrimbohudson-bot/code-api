@@ -4368,6 +4368,7 @@ saveNow(playerId);
 delete P[playerId];
 delete RT[playerId];
 delete FLY[playerId];
+delete TUT[playerId];
 };
 onPlayerChat = function (playerId, chatMessage, channelName) {
 const key = keyOf(nameOf(playerId));
