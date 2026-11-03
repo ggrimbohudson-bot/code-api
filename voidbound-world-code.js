@@ -38,6 +38,8 @@ METEOR_ENCHANT: 5,
 METEOR_TP_MIN: 250,
 METEOR_TP_MAX: 900,
 METEOR_TP_COOLDOWN_MS: 15000,
+METEOR_FORCE_Y: 100,
+METEOR_FORCE_CLEAR: 12,
 WORLD_BORDER: 100000,
 TUTORIAL_GAP_MS: 9000,
 RTP_CENTRE: [0, 0],
@@ -271,6 +273,36 @@ if (y !== null && y > CFG.RTP_MIN_Y) return { x: x, y: y, z: z };
 }
 return null;
 }
+function meteorTopSolid(x, z) {
+for (let y = CFG.RTP_TOP_Y; y > CFG.RTP_MIN_Y; y--) {
+if (blockSolidAt(x, y, z)) return y;
+}
+return null;
+}
+function meteorForceSite() {
+for (let tries = 0; tries < 40; tries++) {
+const angle = Math.random() * Math.PI * 2;
+const dist = CFG.METEOR_MIN_DIST + Math.random() * (CFG.METEOR_RADIUS - CFG.METEOR_MIN_DIST);
+const x = Math.round(CFG.RTP_CENTRE[0] + Math.cos(angle) * dist);
+const z = Math.round(CFG.RTP_CENTRE[1] + Math.sin(angle) * dist);
+if (Math.abs(x) > CFG.WORLD_BORDER - 2000 || Math.abs(z) > CFG.WORLD_BORDER - 2000) continue;
+const top = meteorTopSolid(x, z);
+return { x: x, y: top === null ? CFG.METEOR_FORCE_Y : top + 1, z: z };
+}
+return null;
+}
+function meteorCarve(m) {
+const clear = CFG.METEOR_FORCE_CLEAR;
+for (let dx = -clear; dx <= clear; dx++) {
+for (let dz = -clear; dz <= clear; dz++) {
+const dist = Math.hypot(dx, dz);
+if (dist > clear) continue;
+for (let dy = -1; dy <= 8; dy++) {
+meteorSetBlock(m.x + dx, m.y + dy, m.z + dz, dy === -1 ? (dist <= 4 ? "Obsidian" : "Crystal Block") : "Air");
+}
+}
+}
+}
 function meteorClearChest(m) {
 if (!m || !m.chest) return;
 meteorSetBlock(m.chest[0], m.chest[1], m.chest[2], "Air");
@@ -278,11 +310,12 @@ meteorSetBlock(m.chest[0], m.chest[1], m.chest[2], "Air");
 function buildMeteor(m) {
 const radius = CFG.METEOR_RING;
 const steps = Math.max(48, radius * 8);
+if (m.forced) meteorCarve(m);
 for (let i = 0; i < steps; i++) {
 const angle = (i / steps) * Math.PI * 2;
 const bx = Math.round(m.x + Math.cos(angle) * radius);
 const bz = Math.round(m.z + Math.sin(angle) * radius);
-const by = findSurface(bx, bz);
+const by = m.forced ? m.y : findSurface(bx, bz);
 if (by === null) continue;
 meteorSetBlock(bx, by, bz, "Crystal Block");
 if (i % 12 === 0) {
@@ -291,6 +324,7 @@ meteorSetBlock(bx, by + 2, bz, "Crystal Block");
 meteorSetBlock(bx, by + 3, bz, "Crystal Block");
 }
 }
+if (!m.forced) {
 for (let dx = -4; dx <= 4; dx++) {
 for (let dz = -4; dz <= 4; dz++) {
 const ring = Math.abs(dx) + Math.abs(dz);
@@ -298,6 +332,7 @@ if (ring > 5) continue;
 const by = findSurface(m.x + dx, m.z + dz);
 if (by === null) continue;
 meteorSetBlock(m.x + dx, by, m.z + dz, ring <= 2 ? "Obsidian" : "Crystal Block");
+}
 }
 }
 for (let dy = 1; dy <= 5; dy++) meteorSetBlock(m.x, m.y + dy, m.z, "Air");
@@ -329,22 +364,31 @@ function meteorSay(text, colour) {
 for (const id in P) say(id, text, colour);
 }
 function spawnMeteor(byPlayer, quiet) {
-const spot = meteorSpot();
+let spot = meteorSpot();
+let forced = false;
 if (!spot) {
-if (byPlayer) say(byPlayer, "No open ground for a meteor - try again.", "#ff5555");
+spot = meteorForceSite();
+forced = true;
+}
+if (!spot) {
+if (byPlayer) say(byPlayer, "Meteor failed - the world had nowhere to put it.", "#ff5555");
 return false;
 }
 meteorClearChest(METEOR);
 const loot = METEOR_LOOT[Math.floor(Math.random() * METEOR_LOOT.length)];
-METEOR = { x: spot.x, y: spot.y, z: spot.z, loot: loot, at: Date.now(), filled: false, chest: [spot.x, spot.y, spot.z] };
+METEOR = { x: spot.x, y: spot.y, z: spot.z, loot: loot, at: Date.now(), filled: false, forced: forced, chest: [spot.x, spot.y, spot.z] };
 METEOR_LAST_AT = METEOR.at;
 buildMeteor(METEOR);
 meteorSave();
 if (!quiet) {
+if (forced) {
+meteorSay("A METEOR smashed into the ground at " + METEOR.x + ", " + METEOR.z + " and carved its own crater.", "#ff9c55");
+} else {
 meteorSay("A METEOR has fallen at " + METEOR.x + ", " + METEOR.z + " - crystal walls mark the crater.", "#ff9c55");
-meteorSay("One piece of meteor gear waits inside, packed with gems and ore. /meteortp drops you within " + fmtNum(CFG.METEOR_TP_MAX) + " blocks.", "#b48cff");
 }
-if (byPlayer) say(byPlayer, "Meteor spawned at " + METEOR.x + " " + METEOR.y + " " + METEOR.z + " holding " + METEOR.loot + ".", "#55ff55");
+meteorSay("Gear and gems are inside. /meteortp lands you nearby. Next meteor in " + meteorNextText() + ".", "#b48cff");
+}
+if (byPlayer) say(byPlayer, "Meteor spawned at " + METEOR.x + " " + METEOR.y + " " + METEOR.z + " holding " + METEOR.loot + ". Next in " + meteorNextText() + ".", "#55ff55");
 return true;
 }
 function meteorTick() {
@@ -432,7 +476,7 @@ if (y === null) continue;
 try { api.setPosition(playerId, x, y, z); } catch (e) { continue; }
 rt.meteorTpAt = now;
 say(playerId, "Meteor drop: " + dist + " blocks from the crater, at " + METEOR.x + ", " + METEOR.z + ".", "#b48cff");
-say(playerId, "Follow the crystal ring. The chest holds one piece of the set.", "#8a8a8a");
+say(playerId, "Follow the crystal ring. Next meteor in " + meteorNextText() + ".", "#8a8a8a");
 return true;
 }
 say(playerId, "No safe ground near the meteor - try /meteortp again.", "#ff5555");
@@ -4528,7 +4572,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-METEOR-1";
+const BUILD = "VB-METEOR-2";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
