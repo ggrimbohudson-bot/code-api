@@ -15,8 +15,10 @@ BOARD_EVERY_MS: 4000,
 PORTAL_CHECK_MS: 400,
 PORTAL_COOLDOWN_MS: 4000,
 BLACK_PORTAL_DEST: [50000.5, 60001, 49999.5],
-ARENA_DEST: [9038.5, 9990, 9719.5],
+ARENA_DEST: [9063.5, 9991, 9744.5],
 ARENA_GRACE_MS: 5000,
+ZONE_HALF: 50,
+ZONE_Y: 120,
 ARENA_GRACE_EFFECT: "Damage Reduction",
 GIVER_TALK_RANGE: 5,
 RTP_CENTRE: [0, 0],
@@ -1299,6 +1301,8 @@ if (hasPerm(playerId, "clearinv")) say(playerId, "  /clearinv <player> - empty a
 say(playerId, "TRAVEL", "#55aaff");
 say(playerId, "  /spawn - back to the lobby", "#ffffff");
 say(playerId, "  Light blue portal - PVP arena with a 5s grace period", "#ffffff");
+say(playerId, "Only the owner can break blocks within 100x100 of the arena or the black portal.", "#8a8a8a");
+say(playerId, "No hitting in the lobby or at the black portal.", "#8a8a8a");
 say(playerId, "QUESTS", "#55aaff");
 say(playerId, "  /quests - your quests and XP", "#ffffff");
 say(playerId, "  /quest <fishing|hunting|mining|killing> - talk to a giver", "#ffffff");
@@ -2097,6 +2101,55 @@ function isBlackPortal(name) {
 const text = String(name || "").toLowerCase();
 return text.indexOf("portal") !== -1 && text.indexOf("black") !== -1;
 }
+function zoneRect(centre) {
+return [[centre[0] - CFG.ZONE_HALF, centre[1] - CFG.ZONE_Y, centre[2] - CFG.ZONE_HALF], [centre[0] + CFG.ZONE_HALF, centre[1] + CFG.ZONE_Y, centre[2] + CFG.ZONE_HALF]];
+}
+function buildZoneCentres() {
+return [CFG.ARENA_DEST, CFG.BLACK_PORTAL_DEST];
+}
+function safeZoneCentres() {
+return [LOBBY_SPAWN, CFG.BLACK_PORTAL_DEST];
+}
+function inAnyZone(playerId, centres) {
+let pos = null;
+try {
+pos = api.getPosition(playerId);
+} catch (e) {
+return false;
+}
+if (!pos) return false;
+for (let i = 0; i < centres.length; i++) {
+const c = centres[i];
+if (Math.abs(pos[0] - c[0]) <= CFG.ZONE_HALF && Math.abs(pos[1] - c[1]) <= CFG.ZONE_Y && Math.abs(pos[2] - c[2]) <= CFG.ZONE_HALF) return true;
+}
+return false;
+}
+function inSafeZone(playerId) {
+return inAnyZone(playerId, safeZoneCentres());
+}
+function inBuildZone(playerId) {
+return inAnyZone(playerId, buildZoneCentres());
+}
+function applyZoneRules(playerId) {
+if (!playerId) return;
+const owner = rankLevel(playerId) >= RANKS.owner.level;
+const centres = buildZoneCentres();
+for (let i = 0; i < centres.length; i++) {
+const pts = zoneRect(centres[i]);
+try {
+if (owner) api.resetCanChangeBlockRect(playerId, pts[0], pts[1]);
+else api.setCantChangeBlockRect(playerId, pts[0], pts[1]);
+} catch (e) {
+noteError("zone protect", e);
+}
+}
+}
+onPlayerDamagingOtherPlayer = function (attackingPlayer, damagedPlayer) {
+const now = Date.now();
+if (damagedPlayer && RT[damagedPlayer] && RT[damagedPlayer].arenaGraceUntil > now) return "preventDamage";
+if (damagedPlayer && inSafeZone(damagedPlayer)) return "preventDamage";
+if (attackingPlayer && inSafeZone(attackingPlayer)) return "preventDamage";
+};
 function isLightBluePortal(name) {
 const text = String(name || "").toLowerCase().replace(/[^a-z]/g, "");
 if (text.indexOf("portal") === -1) return false;
@@ -2122,7 +2175,7 @@ api.applyEffect(playerId, CFG.ARENA_GRACE_EFFECT, CFG.ARENA_GRACE_MS / 1000);
 } catch (e) {
 noteError("arena grace", e);
 }
-say(playerId, "PVP ARENA - " + Math.round(CFG.ARENA_GRACE_MS / 1000) + "s grace period, use it.", "#55aaff");
+say(playerId, "PVP ARENA - " + Math.round(CFG.ARENA_GRACE_MS / 1000) + "s grace, nothing can hit you.", "#55aaff");
 return true;
 }
 function blackPortalPlayer(playerId, now) {
@@ -2184,6 +2237,7 @@ const dest = CFG.ARENA_DEST;
 say(playerId, "  light blue portal -> arena " + dest[0] + ", " + dest[1] + ", " + dest[2] + "  " + Math.round(CFG.ARENA_GRACE_MS / 1000) + "s grace", "#55ff55");
 }
 say(playerId, "  arena grace: " + (rt.arenaGraceUntil && rt.arenaGraceUntil > Date.now() ? Math.ceil((rt.arenaGraceUntil - Date.now()) / 1000) + "s" : "none"), "#8a8a8a");
+say(playerId, "  build lock here: " + (inBuildZone(playerId) ? (rankLevel(playerId) >= RANKS.owner.level ? "owner zone - you can build" : "owner zone - locked") : "open"), "#8a8a8a");
 say(playerId, "  ground here: " + (surface === null ? "none found" : surface), "#8a8a8a");
 say(playerId, "  apis: getBlock " + (typeof api.getBlock) + ", solidity " + (typeof api.getBlockSolidity), "#8a8a8a");
 say(playerId, "  cooldown: " + (rt.portalUntil && rt.portalUntil > Date.now() ? Math.ceil((rt.portalUntil - Date.now()) / 1000) + "s" : "ready"), "#8a8a8a");
@@ -2547,6 +2601,7 @@ say(target, "Your Voidbound rank is now " + label + ".", RANKS[want].colour);
 syncClientButtons(target);
 syncBoard(target);
 applyRankCosmetics(target);
+applyZoneRules(target);
 pushRightInfo(target);
 renderStaffMenu(target);
 }
@@ -3593,6 +3648,7 @@ syncShards(playerId);
 setupBoard(playerId);
 syncClientButtons(playerId);
 applyRankCosmetics(playerId);
+applyZoneRules(playerId);
 try { api.setClientOption(playerId, "middleTextLower", ""); } catch (e) { }
 renderStaffMenu(playerId);
 syncClientButtons(playerId);
@@ -3763,7 +3819,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-ARENA-10";
+const BUILD = "VB-ZONES-11";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
