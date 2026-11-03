@@ -213,6 +213,13 @@ const METEOR_PIECES = ["Amethite Helmet", "Amethite Chestplate", "Amethite Leggi
 const METEOR_SWORD = "Amethite Sword";
 const METEOR_LOOT = [METEOR_PIECES[0], METEOR_PIECES[1], METEOR_PIECES[2], METEOR_PIECES[3], METEOR_SWORD];
 const METEOR_EFFECTS = ["Speed", "Damage", "Health Regen", "Damage Reduction"];
+const METEOR_EXTRAS = [
+{ item: "Diamond", amount: 16 },
+{ item: "Gold Bar", amount: 16 },
+{ item: "Amethite Fragment", amount: 12 },
+{ item: "Diamond Fragment", amount: 8 },
+{ item: "Gold Fragment", amount: 8 },
+];
 const TUTORIAL_KEY = "vb_tutorial_v1";
 const TUTORIAL_STEPS = [
 { name: "WELCOME", colour: "#55aaff", lines: ["Welcome to VOIDBOUND SMP - a short walkthrough runs while you settle in.", "Void Shards are the only currency: kills, mobs and playtime pay you.", "Check yourself with /stats, your quests with /quests and every command with /help."] },
@@ -306,6 +313,10 @@ const attrs = meteorAttrs(METEOR.loot);
 try {
 if (attrs) api.setStandardChestItemSlot(METEOR.chest, 0, METEOR.loot, 1, playerId, attrs);
 else api.setStandardChestItemSlot(METEOR.chest, 0, METEOR.loot, 1, playerId);
+for (let i = 0; i < METEOR_EXTRAS.length; i++) {
+const extra = METEOR_EXTRAS[i];
+api.setStandardChestItemSlot(METEOR.chest, i + 1, extra.item, extra.amount, playerId);
+}
 METEOR.filled = true;
 meteorSave();
 return true;
@@ -331,7 +342,7 @@ buildMeteor(METEOR);
 meteorSave();
 if (!quiet) {
 meteorSay("A METEOR has fallen at " + METEOR.x + ", " + METEOR.z + " - crystal walls mark the crater.", "#ff9c55");
-meteorSay("One piece of loot waits inside. /meteortp drops you within " + fmtNum(CFG.METEOR_TP_MAX) + " blocks.", "#b48cff");
+meteorSay("One piece of meteor gear waits inside, packed with gems and ore. /meteortp drops you within " + fmtNum(CFG.METEOR_TP_MAX) + " blocks.", "#b48cff");
 }
 if (byPlayer) say(byPlayer, "Meteor spawned at " + METEOR.x + " " + METEOR.y + " " + METEOR.z + " holding " + METEOR.loot + ".", "#55ff55");
 return true;
@@ -348,7 +359,7 @@ if (Math.abs(spot.x - METEOR.x) > CFG.METEOR_FILL_RANGE || Math.abs(spot.z - MET
 if (Math.abs(spot.y - METEOR.y) > 48) continue;
 if (fillMeteorChest(id)) {
 say(id, "The meteor chest unlocks as you reach the ring.", "#ff9c55");
-say(id, "Loot: " + METEOR.loot + " (enchanted " + CFG.METEOR_ENCHANT + "). One meteor, one piece.", "#b48cff");
+say(id, "Gear: " + METEOR.loot + " (enchanted " + CFG.METEOR_ENCHANT + "), plus " + METEOR_EXTRAS.length + " stacks of gems and ore.", "#b48cff");
 }
 break;
 }
@@ -446,6 +457,7 @@ say(playerId, "  crater: " + METEOR.x + ", " + METEOR.z + (METEOR.filled ? "  (l
 say(playerId, "  no meteor tracked yet", "#8a8a8a");
 }
 say(playerId, "  next meteor in " + meteorNextText() + " - one falls every hour", "#8a8a8a");
+say(playerId, "  one Amethite piece or the sword, plus " + METEOR_EXTRAS.length + " stacks of gems and ore", "#8a8a8a");
 say(playerId, "  /meteortp - land within " + fmtNum(CFG.METEOR_TP_MAX) + " blocks of it", "#ffffff");
 say(playerId, "  Full Amethite set = Meteor Core: speed, damage, regen and damage reduction", "#b48cff");
 if (isOwner(playerId)) say(playerId, "  /meteor spawn - drop one right now", "#ffffff");
