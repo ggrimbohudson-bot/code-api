@@ -30,13 +30,13 @@ LEVEL_CAP: 1000,
 QUEST_XP_SHARE: 0.5,
 METEOR_EVERY_MS: 3600000,
 METEOR_KEY: "vb_meteor_v1",
-METEOR_RADIUS: 4500,
+METEOR_RADIUS: 3000,
 METEOR_MIN_DIST: 600,
 METEOR_RING: 11,
 METEOR_FILL_RANGE: 48,
 METEOR_ENCHANT: 5,
-METEOR_TP_MIN: 250,
-METEOR_TP_MAX: 900,
+METEOR_TP_MIN: 30,
+METEOR_TP_MAX: 120,
 METEOR_TP_COOLDOWN_MS: 15000,
 METEOR_FORCE_Y: 100,
 METEOR_FORCE_CLEAR: 12,
@@ -215,6 +215,7 @@ const METEOR_PIECES = ["Amethite Helmet", "Amethite Chestplate", "Amethite Leggi
 const METEOR_SWORD = "Amethite Sword";
 const METEOR_LOOT = [METEOR_PIECES[0], METEOR_PIECES[1], METEOR_PIECES[2], METEOR_PIECES[3], METEOR_SWORD];
 const METEOR_EFFECTS = ["Speed", "Damage", "Health Regen", "Damage Reduction"];
+const METEOR_LIGHT = "Dim Lamp On";
 const METEOR_EXTRAS = [
 { item: "Diamond", amount: 16 },
 { item: "Gold Bar", amount: 16 },
@@ -242,7 +243,7 @@ function meteorLoad() {
 let raw = null;
 try { raw = api.getLobbyDbValue(CFG.METEOR_KEY); } catch (e) { raw = null; }
 METEOR = null;
-METEOR_LAST_AT = Date.now();
+METEOR_LAST_AT = Date.now() - CFG.METEOR_EVERY_MS;
 if (!raw) return false;
 let data = null;
 try { data = typeof raw === "string" ? JSON.parse(raw) : raw; } catch (e) { data = null; }
@@ -261,6 +262,26 @@ return true;
 function meteorSetBlock(x, y, z, name) {
 try { api.setBlock(x, y, z, name); return true; } catch (e) { noteError("meteor block", e); return false; }
 }
+function meteorFoliage(name) {
+const text = String(name || "").toLowerCase();
+if (!text) return false;
+if (text.indexOf("leaves") >= 0) return true;
+if (text.indexOf("log") >= 0) return true;
+if (text.indexOf("wood") >= 0) return true;
+if (text.indexOf("sapling") >= 0) return true;
+if (text.indexOf("bamboo") >= 0) return true;
+return text.indexOf("vine") >= 0;
+}
+function meteorGround(x, z) {
+let y = CFG.RTP_TOP_Y;
+while (y > CFG.RTP_MIN_Y && !blockSolidAt(x, y, z)) y -= 1;
+if (y <= CFG.RTP_MIN_Y) return null;
+for (let tries = 0; tries < 12 && y > CFG.RTP_MIN_Y; tries++) {
+if (!meteorFoliage(blockNameAt(x, y, z))) return y + 1;
+y -= 1;
+}
+return null;
+}
 function meteorSpot() {
 for (let tries = 0; tries < 40; tries++) {
 const angle = Math.random() * Math.PI * 2;
@@ -268,7 +289,7 @@ const dist = CFG.METEOR_MIN_DIST + Math.random() * (CFG.METEOR_RADIUS - CFG.METE
 const x = Math.round(CFG.RTP_CENTRE[0] + Math.cos(angle) * dist);
 const z = Math.round(CFG.RTP_CENTRE[1] + Math.sin(angle) * dist);
 if (Math.abs(x) > CFG.WORLD_BORDER - 2000 || Math.abs(z) > CFG.WORLD_BORDER - 2000) continue;
-const y = findSurface(x, z);
+const y = meteorGround(x, z);
 if (y !== null && y > CFG.RTP_MIN_Y) return { x: x, y: y, z: z };
 }
 return null;
@@ -315,13 +336,17 @@ for (let i = 0; i < steps; i++) {
 const angle = (i / steps) * Math.PI * 2;
 const bx = Math.round(m.x + Math.cos(angle) * radius);
 const bz = Math.round(m.z + Math.sin(angle) * radius);
-const by = m.forced ? m.y : findSurface(bx, bz);
+const by = m.forced ? m.y : meteorGround(bx, bz);
 if (by === null) continue;
 meteorSetBlock(bx, by, bz, "Crystal Block");
 if (i % 12 === 0) {
 meteorSetBlock(bx, by + 1, bz, "Crystal Block");
 meteorSetBlock(bx, by + 2, bz, "Crystal Block");
 meteorSetBlock(bx, by + 3, bz, "Crystal Block");
+meteorSetBlock(bx, by + 4, bz, METEOR_LIGHT);
+}
+for (let dy = 1; dy <= 6; dy++) {
+if (meteorFoliage(blockNameAt(bx, by + dy, bz))) meteorSetBlock(bx, by + dy, bz, "Air");
 }
 }
 if (!m.forced) {
@@ -329,13 +354,16 @@ for (let dx = -4; dx <= 4; dx++) {
 for (let dz = -4; dz <= 4; dz++) {
 const ring = Math.abs(dx) + Math.abs(dz);
 if (ring > 5) continue;
-const by = findSurface(m.x + dx, m.z + dz);
+const by = meteorGround(m.x + dx, m.z + dz);
 if (by === null) continue;
 meteorSetBlock(m.x + dx, by, m.z + dz, ring <= 2 ? "Obsidian" : "Crystal Block");
+for (let dy = 1; dy <= 6; dy++) {
+if (meteorFoliage(blockNameAt(m.x + dx, by + dy, m.z + dz))) meteorSetBlock(m.x + dx, by + dy, m.z + dz, "Air");
 }
 }
 }
-for (let dy = 1; dy <= 5; dy++) meteorSetBlock(m.x, m.y + dy, m.z, "Air");
+}
+for (let dy = 1; dy <= 8; dy++) meteorSetBlock(m.x, m.y + dy, m.z, "Air");
 m.chest = [m.x, m.y, m.z];
 meteorSetBlock(m.x, m.y, m.z, "Chest [R]");
 }
@@ -386,7 +414,7 @@ meteorSay("A METEOR smashed into the ground at " + METEOR.x + ", " + METEOR.z + 
 } else {
 meteorSay("A METEOR has fallen at " + METEOR.x + ", " + METEOR.z + " - crystal walls mark the crater.", "#ff9c55");
 }
-meteorSay("Gear and gems are inside. /meteortp lands you nearby. Next meteor in " + meteorNextText() + ".", "#b48cff");
+meteorSay("Gear and gems are inside. /meteortp lands you in sight of it. Next meteor in " + meteorNextText() + ".", "#b48cff");
 }
 if (byPlayer) say(byPlayer, "Meteor spawned at " + METEOR.x + " " + METEOR.y + " " + METEOR.z + " holding " + METEOR.loot + ". Next in " + meteorNextText() + ".", "#55ff55");
 return true;
@@ -502,7 +530,7 @@ say(playerId, "  no meteor tracked yet", "#8a8a8a");
 }
 say(playerId, "  next meteor in " + meteorNextText() + " - one falls every hour", "#8a8a8a");
 say(playerId, "  one Amethite piece or the sword, plus " + METEOR_EXTRAS.length + " stacks of gems and ore", "#8a8a8a");
-say(playerId, "  /meteortp - land within " + fmtNum(CFG.METEOR_TP_MAX) + " blocks of it", "#ffffff");
+say(playerId, "  /meteortp - land in sight of the crater", "#ffffff");
 say(playerId, "  Full Amethite set = Meteor Core: speed, damage, regen and damage reduction", "#b48cff");
 if (isOwner(playerId)) say(playerId, "  /meteor spawn - drop one right now", "#ffffff");
 return false;
@@ -4417,6 +4445,7 @@ tutorialShow(playerId, st);
 if (r.level > 0) {
 say(playerId, "Staff rank: " + r.name + "  |  Press B or N for your staff menu", r.colour);
 }
+if (METEOR) say(playerId, "Meteor crater at " + METEOR.x + ", " + METEOR.z + " - /meteortp to land beside it. Next in " + meteorNextText() + ".", "#ff9c55");
 pushRightInfo(playerId, true);
 };
 onPlayerLeave = function (playerId) {
@@ -4572,7 +4601,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-METEOR-2";
+const BUILD = "VB-METEOR-3";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
