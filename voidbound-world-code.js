@@ -24,6 +24,7 @@ GIVER_TALK_RANGE: 5,
 PRESTIGE_POS: [50011.5, 60001, 49999.5],
 PRESTIGE_YAW: 90,
 PRESTIGE_STEP: 0.05,
+PRESTIGE_STAT_MAX: 10,
 PRESTIGE_MAX: 40,
 LEVEL_CAP: 1000,
 QUEST_XP_SHARE: 0.5,
@@ -609,7 +610,7 @@ since: num(quest.since),
 if (old.prestige && typeof old.prestige === "object") {
 const saved = old.prestige;
 d.prestige.count = Math.min(CFG.PRESTIGE_MAX, num(saved.count));
-for (let i = 0; i < PRESTIGE_STATS.length; i++) d.prestige[PRESTIGE_STATS[i]] = num(saved[PRESTIGE_STATS[i]]);
+for (let i = 0; i < PRESTIGE_STATS.length; i++) d.prestige[PRESTIGE_STATS[i]] = Math.min(CFG.PRESTIGE_STAT_MAX, num(saved[PRESTIGE_STATS[i]]));
 }
 return d;
 }
@@ -1594,7 +1595,7 @@ function prestigeData(playerId) {
 const d = ensure(playerId);
 if (!d.prestige || typeof d.prestige !== "object") d.prestige = { count: 0, speed: 0, damage: 0, health: 0, xp: 0 };
 d.prestige.count = Math.min(CFG.PRESTIGE_MAX, num(d.prestige.count));
-for (let i = 0; i < PRESTIGE_STATS.length; i++) d.prestige[PRESTIGE_STATS[i]] = num(d.prestige[PRESTIGE_STATS[i]]);
+for (let i = 0; i < PRESTIGE_STATS.length; i++) d.prestige[PRESTIGE_STATS[i]] = Math.min(CFG.PRESTIGE_STAT_MAX, num(d.prestige[PRESTIGE_STATS[i]]));
 return d.prestige;
 }
 function prestigeUnspent(playerId) {
@@ -1656,6 +1657,10 @@ if (!p.count) {
 say(playerId, "Prestige first - " + PRESTIGE_NPC_NAME + " takes level " + CFG.LEVEL_CAP + ".", "#ff5555");
 return false;
 }
+if (p[key] >= CFG.PRESTIGE_STAT_MAX) {
+say(playerId, "Prestige " + key + " is maxed at +" + Math.round(CFG.PRESTIGE_STAT_MAX * CFG.PRESTIGE_STEP * 100) + "%. Spend shards on another stat.", "#ffd75e");
+return false;
+}
 if (prestigeUnspent(playerId) <= 0) {
 say(playerId, "No unspent prestige shards. Prestige again for more.", "#ff5555");
 return false;
@@ -1688,7 +1693,7 @@ for (let i = 0; i < PRESTIGE_STATS.length; i++) parts.push(PRESTIGE_STATS[i] + "
 say(playerId, parts.join("  |  ") + "   (1 shard = +5%)", "#8a8a8a");
 if (prestigeReady(playerId)) say(playerId, "Ready now - /prestige do, or right-click " + PRESTIGE_NPC_NAME + ".", "#55ff55");
 else if (p.count < CFG.PRESTIGE_MAX) say(playerId, "Reach level " + CFG.LEVEL_CAP + " to prestige. Repeatable quests give half a level each.", "#5a5a5a");
-say(playerId, "/prestige speed|damage|health|xp spends one shard.", "#ffffff");
+say(playerId, "/prestige speed|damage|health|xp spends one shard, " + CFG.PRESTIGE_STAT_MAX + " per stat max (+" + Math.round(CFG.PRESTIGE_STAT_MAX * CFG.PRESTIGE_STEP * 100) + "%).", "#ffffff");
 }
 function prestigeTile(image, title, desc, usable, sort) {
 return {
@@ -1712,7 +1717,10 @@ putShopItem(playerId, SHOP_CATS.prestige.key, "vb_p_do", prestigeTile("Moonstone
 const rows = [["speed", "Speed", "Diamond Boots"], ["damage", "Damage", "Diamond"], ["health", "Health", "Diamond Helmet"], ["xp", "XP", "Book"]];
 for (let i = 0; i < rows.length; i++) {
 const key = rows[i][0];
-putShopItem(playerId, SHOP_CATS.prestige.key, "vb_p_" + key, prestigeTile(rows[i][2], rows[i][1] + " +" + Math.round((prestigeMultiplier(playerId, key) - 1) * 100) + "%", p[key] + " shards spent here, +5% each. " + unspent + " unspent.", unspent > 0, 300 - i * 10));
+const maxed = p[key] >= CFG.PRESTIGE_STAT_MAX;
+const title = rows[i][1] + " +" + Math.round((prestigeMultiplier(playerId, key) - 1) * 100) + "%" + (maxed ? " MAX" : "");
+const desc = maxed ? CFG.PRESTIGE_STAT_MAX + " shards spent, +5% each - maxed at +" + Math.round(CFG.PRESTIGE_STAT_MAX * CFG.PRESTIGE_STEP * 100) + "%." : p[key] + " shards spent here, +5% each. " + unspent + " unspent.";
+putShopItem(playerId, SHOP_CATS.prestige.key, "vb_p_" + key, prestigeTile(rows[i][2], title, desc, unspent > 0 && !maxed, 300 - i * 10));
 }
 }
 function openPrestigeMenu(playerId) {
@@ -4142,7 +4150,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-PRESTIGE-15";
+const BUILD = "VB-PRESTIGE-16";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");

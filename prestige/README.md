@@ -7,17 +7,21 @@ in game to open the Prestige menu, or use `/prestige`.
   gives you **one prestige shard**.
 - **1 shard = +5%** to one stat. You choose which: `/prestige speed|damage|health|xp`
   or the four buttons in the menu.
+- **Each stat takes at most 10 shards (a 50% bonus).** Once a stat reads MAX the
+  menu will not sell it another, so spare shards go into the other three.
 - **Prestige caps at 40.** The level cap stays at 1000 until you have prestiged 40
   times - after that there is no level cap at all.
 - Quests give at least half a level of XP, so a repeatable bounty keeps levelling
   you forever and reaching 1000 is a matter of grinding them.
 
-| Stat | +5% per shard | 40 shards | Applied as |
+| Stat | +5% per shard | 10 shards (max) | Applied as |
 |---|---|---|---|
-| Speed | movement speed | x3 | `speedMultiplier` |
-| Damage | damage dealt | x3 | `dealingDamageMultiplier` |
-| Health | max health | 300 HP | `maxHealth` |
-| XP | every XP gain | x3 | world code `addXp` |
+| Speed | movement speed | x1.5 | `speedMultiplier` |
+| Damage | damage dealt | x1.5 | `dealingDamageMultiplier` |
+| Health | max health | 150 HP | `maxHealth` |
+| XP | every XP gain | x1.5 | world code `addXp` |
+
+10 shards in every stat is 40 shards, exactly the 40 shards from 40 prestiges.
 
 ## The code blocks
 
