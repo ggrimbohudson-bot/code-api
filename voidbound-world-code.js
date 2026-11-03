@@ -21,6 +21,12 @@ ZONE_HALF: 50,
 ZONE_Y: 120,
 ARENA_GRACE_EFFECT: "Damage Reduction",
 GIVER_TALK_RANGE: 5,
+PRESTIGE_POS: [50011.5, 60001, 49999.5],
+PRESTIGE_YAW: 90,
+PRESTIGE_STEP: 0.05,
+PRESTIGE_MAX: 40,
+LEVEL_CAP: 1000,
+QUEST_XP_SHARE: 0.5,
 RTP_CENTRE: [0, 0],
 RTP_MIN_DIST: 80,
 RTP_RADIUS: 500,
@@ -538,6 +544,7 @@ rewards: {},
 },
 quests: {},
 skills: {},
+prestige: { count: 0, speed: 0, damage: 0, health: 0, xp: 0 },
 };
 }
 function num(v) {
@@ -598,6 +605,11 @@ xp: num(quest.xp),
 since: num(quest.since),
 };
 }
+}
+if (old.prestige && typeof old.prestige === "object") {
+const saved = old.prestige;
+d.prestige.count = Math.min(CFG.PRESTIGE_MAX, num(saved.count));
+for (let i = 0; i < PRESTIGE_STATS.length; i++) d.prestige[PRESTIGE_STATS[i]] = num(saved[PRESTIGE_STATS[i]]);
 }
 return d;
 }
@@ -1179,7 +1191,7 @@ out.push(segText("\n◈ " + fmtNum(d.shards) + "   ★ #" + placeOf(playerId, "k
 out.push(segText("\n◷ " + fmtShortTime(d.stats.playtimeMs) + "   ⚔ " + d.stats.kills + "K " + d.stats.deaths + "D", "#8fd0ff"));
 let skillLine = "";
 for (const key in QUEST_TYPES) skillLine += QUEST_TYPES[key].short + " Lv" + levelFor(skillOf(playerId, key).xp) + "  ";
-out.push(segText("\n✦ LV" + levelFor(d.stats.xp) + " " + levelPercent(d.stats.xp) + "%  " + skillLine.trim(), "#b48cff"));
+out.push(segText("\n✦ LV" + levelFor(d.stats.xp) + " " + levelPercent(d.stats.xp) + "%" + (prestigeData(playerId).count ? " P" + prestigeData(playerId).count : "") + "  " + skillLine.trim(), "#b48cff"));
 out.push(segText("\n"), panelRule());
 out.push(segText("\nQUESTS", "#ffcc00"));
 panelQuests(out, d);
@@ -1200,7 +1212,7 @@ lines.push("Shards " + fmtNum(d.shards) + "   Rank #" + placeOf(playerId, "kills
 lines.push("Played " + fmtShortTime(d.stats.playtimeMs) + "   " + d.stats.kills + "K " + d.stats.deaths + "D");
 let skillLine = "";
 for (const key in QUEST_TYPES) skillLine += QUEST_TYPES[key].short + " Lv" + levelFor(skillOf(playerId, key).xp) + "  ";
-lines.push("Level " + levelFor(d.stats.xp) + " " + levelPercent(d.stats.xp) + "%  " + skillLine.trim());
+lines.push("Level " + levelFor(d.stats.xp) + " " + levelPercent(d.stats.xp) + "%" + (prestigeData(playerId).count ? "  P" + prestigeData(playerId).count : "") + "  " + skillLine.trim());
 lines.push("────────────");
 lines.push("QUESTS");
 for (const key in QUEST_TYPES) {
@@ -1307,6 +1319,7 @@ say(playerId, "QUESTS", "#55aaff");
 say(playerId, "  /quests - your quests and XP", "#ffffff");
 say(playerId, "  /quest <fishing|hunting|mining|killing> - talk to a giver", "#ffffff");
 say(playerId, "  Givers: xVexx the Angler, TECMAN_ the Monster Hunter, Conceptual the Assassin, ItzKasaiXYT the Killer.", "#8a8a8a");
+say(playerId, "  /prestige - BloxdSeno at 50011 60001 49999, right-click at level " + CFG.LEVEL_CAP + ".", "#ffd75e");
 say(playerId, "SERVER", "#55aaff");
 say(playerId, "  /events - scheduled events", "#ffffff");
 say(playerId, "  /event idea <text> - propose an event", "#ffffff");
@@ -1532,9 +1545,197 @@ say(playerId, "  " + label + " " + fmtNum(r.shards) + " - " + fmtShortTime(r.min
 }
 say(playerId, claimed + "/" + TIME_REWARDS.length + " claimed. /rewards claim takes all ready ones.", "#55ffff");
 }
+const PRESTIGE_STATS = ["speed", "damage", "health", "xp"];
+const PRESTIGE_NPC_NAME = "BloxdSeno";
+let PRESTIGE_NPC = null;
+function prestigeData(playerId) {
+const d = ensure(playerId);
+if (!d.prestige || typeof d.prestige !== "object") d.prestige = { count: 0, speed: 0, damage: 0, health: 0, xp: 0 };
+d.prestige.count = Math.min(CFG.PRESTIGE_MAX, num(d.prestige.count));
+for (let i = 0; i < PRESTIGE_STATS.length; i++) d.prestige[PRESTIGE_STATS[i]] = num(d.prestige[PRESTIGE_STATS[i]]);
+return d.prestige;
+}
+function prestigeUnspent(playerId) {
+const p = prestigeData(playerId);
+return Math.max(0, p.count - p.speed - p.damage - p.health - p.xp);
+}
+function prestigeMultiplier(playerId, key) {
+return 1 + CFG.PRESTIGE_STEP * prestigeData(playerId)[key];
+}
+function levelCap(playerId) {
+return prestigeData(playerId).count >= CFG.PRESTIGE_MAX ? Infinity : CFG.LEVEL_CAP;
+}
+function capLevelXp(playerId) {
+const cap = levelCap(playerId);
+return cap === Infinity ? Infinity : levelFloorXp(cap + 1) - 1;
+}
+function applyPrestige(playerId) {
+const speed = Math.min(3, prestigeMultiplier(playerId, "speed"));
+const damage = Math.min(3, prestigeMultiplier(playerId, "damage"));
+const health = Math.round(100 * Math.min(3, prestigeMultiplier(playerId, "health")));
+try { api.setClientOption(playerId, "speedMultiplier", speed); } catch (e) { noteError("prestige speed", e); }
+try { api.setClientOption(playerId, "dealingDamageMultiplier", damage); } catch (e) { noteError("prestige damage", e); }
+try { api.setClientOption(playerId, "maxHealth", health); } catch (e) { noteError("prestige health", e); }
+}
+function prestigeReady(playerId) {
+const d = P[playerId];
+if (!d) return false;
+return prestigeData(playerId).count < CFG.PRESTIGE_MAX && levelFor(d.stats.xp) >= CFG.LEVEL_CAP;
+}
+function doPrestige(playerId) {
+const d = ensure(playerId);
+const p = prestigeData(playerId);
+if (p.count >= CFG.PRESTIGE_MAX) {
+say(playerId, "You are at " + CFG.PRESTIGE_MAX + " prestiges - the maximum. Keep levelling, there is no cap now.", "#ffd75e");
+return false;
+}
+if (levelFor(d.stats.xp) < CFG.LEVEL_CAP) {
+say(playerId, "Prestige needs level " + CFG.LEVEL_CAP + " and you are " + levelFor(d.stats.xp) + ". Quests are the fastest XP.", "#ff5555");
+return false;
+}
+p.count += 1;
+d.stats.xp = 0;
+applyPrestige(playerId);
+saveNow(playerId);
+syncBoard(playerId);
+pushRightInfo(playerId, true);
+renderPrestigeMenu(playerId);
+const left = prestigeUnspent(playerId);
+say(playerId, "PRESTIGE " + p.count + "/" + CFG.PRESTIGE_MAX + "! Back to level 1 with " + left + " prestige shard" + (left === 1 ? "" : "s") + " to spend.", "#ffd75e");
+say(playerId, "Each shard is +5%: /prestige speed | damage | health | xp", "#b48cff");
+say(playerId, p.count >= CFG.PRESTIGE_MAX ? "Prestige maxed - the level cap is gone, climb forever." : "Level cap stays " + CFG.LEVEL_CAP + " until prestige " + CFG.PRESTIGE_MAX + ".", "#8a8a8a");
+try { api.playSound(playerId, "levelup", 1, 1); } catch (e) { }
+return true;
+}
+function spendPrestige(playerId, key) {
+if (PRESTIGE_STATS.indexOf(key) === -1) return false;
+const p = prestigeData(playerId);
+if (!p.count) {
+say(playerId, "Prestige first - " + PRESTIGE_NPC_NAME + " takes level " + CFG.LEVEL_CAP + ".", "#ff5555");
+return false;
+}
+if (prestigeUnspent(playerId) <= 0) {
+say(playerId, "No unspent prestige shards. Prestige again for more.", "#ff5555");
+return false;
+}
+p[key] += 1;
+applyPrestige(playerId);
+saveNow(playerId);
+pushRightInfo(playerId, true);
+renderPrestigeMenu(playerId);
+say(playerId, "Prestige " + key + " +" + Math.round((prestigeMultiplier(playerId, key) - 1) * 100) + "%  |  " + prestigeUnspent(playerId) + " shards left.", "#55ff55");
+try { api.playSound(playerId, "levelup", 1, 1); } catch (e) { }
+return true;
+}
+function cmdPrestige(playerId, args) {
+const d = ensure(playerId);
+const p = prestigeData(playerId);
+const sub = String(args && args[1] ? args[1] : "").toLowerCase();
+if (sub === "do" || sub === "ascend" || sub === "now") {
+doPrestige(playerId);
+return;
+}
+if (PRESTIGE_STATS.indexOf(sub) !== -1) {
+spendPrestige(playerId, sub);
+return;
+}
+say(playerId, "== PRESTIGE ==", "#ffd75e");
+say(playerId, PRESTIGE_NPC_NAME + "  |  prestige " + p.count + "/" + CFG.PRESTIGE_MAX + "  |  level " + levelFor(d.stats.xp) + " / " + (p.count >= CFG.PRESTIGE_MAX ? "no cap" : CFG.LEVEL_CAP) + "  |  " + prestigeUnspent(playerId) + " unspent", "#b48cff");
+const parts = [];
+for (let i = 0; i < PRESTIGE_STATS.length; i++) parts.push(PRESTIGE_STATS[i] + " +" + Math.round((prestigeMultiplier(playerId, PRESTIGE_STATS[i]) - 1) * 100) + "%");
+say(playerId, parts.join("  |  ") + "   (1 shard = +5%)", "#8a8a8a");
+if (prestigeReady(playerId)) say(playerId, "Ready now - /prestige do, or right-click " + PRESTIGE_NPC_NAME + ".", "#55ff55");
+else if (p.count < CFG.PRESTIGE_MAX) say(playerId, "Reach level " + CFG.LEVEL_CAP + " to prestige. Repeatable quests give half a level each.", "#5a5a5a");
+say(playerId, "/prestige speed|damage|health|xp spends one shard.", "#ffffff");
+}
+function prestigeTile(image, title, desc, usable, sort) {
+return {
+image: image,
+cost: 0,
+currency: CFG.CURRENCY_ID,
+canBuy: !!usable,
+hidden: false,
+buyButtonText: "Use",
+customTitle: title,
+description: desc,
+sortPriority: sort === undefined ? 0 : sort,
+};
+}
+function renderPrestigeMenu(playerId) {
+if (!playerId || !P[playerId]) return;
+const p = prestigeData(playerId);
+const unspent = prestigeUnspent(playerId);
+const ready = prestigeReady(playerId);
+putShopItem(playerId, SHOP_CATS.prestige.key, "vb_p_do", prestigeTile("Moonstone Orb", ready ? "PRESTIGE NOW" : "Prestige " + (p.count + 1) + "/" + CFG.PRESTIGE_MAX, ready ? "Level " + CFG.LEVEL_CAP + " reached. Ascend for one prestige shard." : "Needs level " + CFG.LEVEL_CAP + ", you are " + levelFor(P[playerId].stats.xp) + ".", ready, 400));
+const rows = [["speed", "Speed", "Diamond Boots"], ["damage", "Damage", "Diamond"], ["health", "Health", "Diamond Helmet"], ["xp", "XP", "Book"]];
+for (let i = 0; i < rows.length; i++) {
+const key = rows[i][0];
+putShopItem(playerId, SHOP_CATS.prestige.key, "vb_p_" + key, prestigeTile(rows[i][2], rows[i][1] + " +" + Math.round((prestigeMultiplier(playerId, key) - 1) * 100) + "%", p[key] + " shards spent here, +5% each. " + unspent + " unspent.", unspent > 0, 300 - i * 10));
+}
+}
+function openPrestigeMenu(playerId) {
+ensure(playerId);
+if (PRESTIGE_NPC) try { api.setPosition(PRESTIGE_NPC, CFG.PRESTIGE_POS[0], CFG.PRESTIGE_POS[1], CFG.PRESTIGE_POS[2]); } catch (e) { }
+renderPrestigeMenu(playerId);
+cmdPrestige(playerId, []);
+try { api.openShop(playerId, false, SHOP_CATS.prestige.key, false); } catch (e) { say(playerId, "Menu would not open - use /prestige.", "#ff5555"); }
+}
+function handlePrestigeBuy(playerId, itemKey) {
+if (!P[playerId]) return false;
+if (itemKey === "vb_p_do") {
+doPrestige(playerId);
+refreshShop(playerId, SHOP_CATS.prestige.key);
+return true;
+}
+if (String(itemKey).indexOf("vb_p_") === 0) {
+spendPrestige(playerId, String(itemKey).slice(5));
+refreshShop(playerId, SHOP_CATS.prestige.key);
+return true;
+}
+return false;
+}
+function questXpFor(playerId, base) {
+const d = P[playerId];
+const flat = Math.max(0, Math.floor(Number(base) || 0));
+if (!d) return flat;
+return Math.max(flat, Math.floor(xpToNextLevel(d.stats.xp) * CFG.QUEST_XP_SHARE));
+}
+function applyPrestigeNameTag() {
+if (!PRESTIGE_NPC) return;
+try {
+api.setTargetedPlayerSettingForEveryone(PRESTIGE_NPC, "nameTagInfo", {
+content: [{ str: "\u2726 " + PRESTIGE_NPC_NAME.toUpperCase() + " \u2726", style: styleFor("#ffd75e") }],
+subtitle: [{ str: "PRESTIGE - RIGHT-CLICK AT LEVEL " + CFG.LEVEL_CAP, style: styleFor("#8a8a8a") }],
+border: { colour: colourName("#ffd75e"), style: "glow" },
+}, true);
+return;
+} catch (e) {
+noteError("prestige nametag", e);
+}
+try { api.setTargetedPlayerSettingForEveryone(PRESTIGE_NPC, "nameColour", "gold", true); } catch (e) { noteError("prestige colour", e); }
+}
+function setupPrestigeNpc() {
+if (PRESTIGE_NPC) return;
+let eId = null;
+try {
+eId = api.attemptCreateMeshEntity("Person", { size: 1.2, pose: "standing", textures: { head: "wizard" } }, PRESTIGE_NPC_NAME + " - right-click to prestige");
+} catch (e) {
+noteError("prestige npc", e);
+eId = null;
+}
+if (!eId) {
+try { eId = api.attemptCreateMeshEntity("Person", { size: 1.2, pose: "standing" }, PRESTIGE_NPC_NAME); } catch (e) { noteError("prestige npc plain", e); eId = null; }
+}
+if (!eId) return;
+PRESTIGE_NPC = eId;
+try { api.setPosition(eId, CFG.PRESTIGE_POS[0], CFG.PRESTIGE_POS[1], CFG.PRESTIGE_POS[2]); } catch (e) { noteError("prestige pos", e); }
+try { api.setEntityRotation(eId, 0, CFG.PRESTIGE_YAW, 0); } catch (e) { noteError("prestige yaw", e); }
+applyPrestigeNameTag();
+}
 function setOverallLevel(playerId, level) {
 const d = ensure(playerId);
-const want = Math.max(1, Math.min(1000, Math.floor(Number(level) || 1)));
+const top = levelCap(playerId);
+const want = Math.max(1, Math.min(top === Infinity ? 1000000 : top, Math.floor(Number(level) || 1)));
 d.stats.xp = levelFloorXp(want);
 saveNow(playerId);
 syncBoard(playerId);
@@ -1544,7 +1745,8 @@ return want;
 function addOverallLevels(playerId, levels) {
 const d = ensure(playerId);
 const current = levelFor(d.stats.xp);
-const want = Math.max(1, Math.min(1000, current + Math.floor(Number(levels) || 0)));
+const top = levelCap(playerId);
+const want = top === Infinity ? Math.max(1, current + Math.floor(Number(levels) || 0)) : Math.max(1, Math.min(top, current + Math.floor(Number(levels) || 0)));
 return setOverallLevel(playerId, want);
 }
 function grantTarget(playerId, args) {
@@ -2669,6 +2871,7 @@ staff: { key: "vb_staff", title: "Staff", blurb: "Flight, movement, items and st
 mod: { key: "vb_mod", title: "Moderation", blurb: "Warn, mute, kick, temp ban and bans.", sort: 89 },
 owner: { key: "vb_owner", title: "Founder", blurb: "Ranks, events and the update log.", sort: 88 },
 econ: { key: "vb_econ", title: "Economy", blurb: "Levels and Void Shards for any player.", sort: 87 },
+prestige: { key: "vb_prestige", title: "Prestige", blurb: "Trade level 1000 for a prestige shard worth +5%.", sort: 86 },
 };
 function words(text) {
 const s = String(text === undefined || text === null ? "" : text).trim();
@@ -3151,7 +3354,7 @@ refreshShop(playerId, catKey);
 return true;
 }
 function setupStaffShop() {
-const cats = [SHOP_CATS.staff, SHOP_CATS.mod, SHOP_CATS.owner, SHOP_CATS.econ];
+const cats = [SHOP_CATS.staff, SHOP_CATS.mod, SHOP_CATS.owner, SHOP_CATS.econ, SHOP_CATS.prestige];
 for (let i = 0; i < cats.length; i++) {
 try {
 api.configureShopCategory(cats[i].key, {
@@ -3167,6 +3370,8 @@ const entry = MENU[i];
 baseShopItem(entry.cat.key, entry.id, entry.image);
 if (entry.step2) baseShopItem(entry.cat.key, entry.id + "_go", entry.step2.image || entry.image);
 }
+baseShopItem(SHOP_CATS.prestige.key, "vb_p_do", "Moonstone Orb");
+for (let i = 0; i < PRESTIGE_STATS.length; i++) baseShopItem(SHOP_CATS.prestige.key, "vb_p_" + PRESTIGE_STATS[i], "Diamond");
 for (let i = 0; i < cats.length; i++) baseShopItem(cats[i].key, "vb_cancel", "Moonstone Fragment");
 }
 const QUEST_CENTRE = [10000, -9999, 10000];
@@ -3251,7 +3456,8 @@ return levelFloorXp(level + 1) - levelFloorXp(level);
 function addXp(playerId, amount) {
 const d = ensure(playerId);
 const before = levelFor(d.stats.xp);
-d.stats.xp += Math.max(0, Math.floor(amount));
+const gained = Math.max(0, Math.floor(amount * prestigeMultiplier(playerId, "xp")));
+d.stats.xp = Math.min(d.stats.xp + gained, capLevelXp(playerId));
 const after = levelFor(d.stats.xp);
 return after > before ? after : 0;
 }
@@ -3272,6 +3478,8 @@ const level = levelFor(d.stats.xp);
 say(playerId, "Overall level " + level + "  |  " + fmtNum(d.stats.xp) + " XP", "#b48cff");
 say(playerId, levelBar(d.stats.xp) + "  " + xpIntoLevel(d.stats.xp) + "/" + xpToNextLevel(d.stats.xp) + " to level " + (level + 1), "#8a8a8a");
 say(playerId, "XP comes from kills, mobs, mining, fishing, quests and time online.", "#5a5a5a");
+const p = prestigeData(playerId);
+say(playerId, "Prestige " + p.count + "/" + CFG.PRESTIGE_MAX + "  |  cap " + (p.count >= CFG.PRESTIGE_MAX ? "none" : CFG.LEVEL_CAP) + "  |  /prestige", "#ffd75e");
 }
 const DISCORD_LINK = "https://discord.gg/crWR7Xx6bZ";
 const FANCY_TITLE = true;
@@ -3451,6 +3659,7 @@ applyGiverYaw(type);
 }
 function healGiverAims() {
 for (const key in QUEST_NPCS) applyGiverYaw(key);
+if (PRESTIGE_NPC) try { api.setEntityRotation(PRESTIGE_NPC, 0, CFG.PRESTIGE_YAW, 0); } catch (e) { }
 }
 function applyGiverYaw(type) {
 const eId = QUEST_NPCS[type];
@@ -3461,7 +3670,7 @@ function cmdDiag(playerId) {
 const ids = [];
 for (const key in QUEST_NPCS) ids.push(key + "=" + QUEST_NPCS[key]);
 say(playerId, "VOIDBOUND DIAG", "#ffcc00");
-say(playerId, "givers " + ids.length + "/4  " + (ids.join("  ") || "none spawned"), "#8a8a8a");
+say(playerId, "givers " + ids.length + "/4  prestige " + (PRESTIGE_NPC ? "up" : "missing") + "  " + (ids.join("  ") || "none spawned"), "#8a8a8a");
 say(playerId, "side panel " + (PANEL_OFF[playerId] ? "hidden by /panel" : "on"), "#8a8a8a");
 for (const key in QUEST_TYPES) {
 say(playerId, "  " + key + " skin " + giverSkin(key) + " yaw " + Math.round(giverYaw(key)) + " nudge " + (GIVER_YAW[key] || 0), "#8a8a8a");
@@ -3496,6 +3705,7 @@ noteError("position " + key, e);
 applyGiverYaw(key);
 applyGiverNameTag(key);
 }
+setupPrestigeNpc();
 }
 function questSpec(type, done) {
 const giver = QUEST_TYPES[type];
@@ -3586,7 +3796,7 @@ const giver = QUEST_TYPES[type];
 saveNow(playerId);
 pushRightInfo(playerId);
 say(playerId, "Quest complete: " + (quest.name || giver.name) + " - " + giver.verb + " " + quest.need + " " + giver.unit + ".", giver.colour);
-say(playerId, "Claim it with " + giver.who + " for " + fmtNum(quest.shards) + " shards and " + quest.xp + " XP.", "#ffd75e");
+say(playerId, "Claim it with " + giver.who + " for " + fmtNum(quest.shards) + " shards and " + questXpFor(playerId, quest.xp) + " XP.", "#ffd75e");
 try { api.playSound(playerId, "levelup", 1, 1); } catch (e) { }
 }
 function questTalk(playerId, type) {
@@ -3601,7 +3811,7 @@ segText(" " + giver.who + ": ", giver.colour),
 segText(fresh.name + " - " + giver.verb + " " + fresh.need + " " + giver.unit + ".", "#e0e0e0"),
 ]);
 if (fresh.line) say(playerId, fresh.line, "#8a8a8a");
-say(playerId, "Tier " + fresh.tier + " reward: " + fmtNum(fresh.shards) + " shards + " + fresh.xp + " XP. Come back when it is done.", "#8a8a8a");
+say(playerId, "Tier " + fresh.tier + " reward: " + fmtNum(fresh.shards) + " shards + " + questXpFor(playerId, fresh.xp) + " XP. Come back when it is done.", "#8a8a8a");
 say(playerId, "My contracts: " + giver.chain.map(function (q) { return q.name; }).join(", ") + ", then endless " + giver.endless.name + ".", "#5a5a5a");
 return;
 }
@@ -3614,12 +3824,12 @@ segText((quest.name || giver.name) + " - " + quest.have + "/" + quest.need + " "
 return;
 }
 const shards = quest.shards;
-const xp = quest.xp;
+const xp = questXpFor(playerId, quest.xp);
 delete d.quests[type];
 const skill = skillOf(playerId, type);
 const skillBefore = levelFor(skill.xp);
 skill.done += 1;
-skill.xp += xp;
+skill.xp += quest.xp;
 const skillAfter = levelFor(skill.xp);
 const nextSpec = questSpec(type, skill.done);
 addShards(playerId, shards, true);
@@ -3634,7 +3844,7 @@ segText("+" + fmtNum(shards) + " shards", "#ffd75e"),
 segText("  +" + xp + " XP", "#b48cff"),
 ]);
 say(playerId, giver.short + " level " + skillAfter + "  |  " + xpIntoLevel(skill.xp) + "/" + xpToNextLevel(skill.xp) + " to level " + (skillAfter + 1), "#8a8a8a");
-say(playerId, "Next: " + nextSpec.name + " (tier " + nextSpec.tier + ") - " + giver.verb + " " + nextSpec.need + " " + giver.unit + " for " + fmtNum(nextSpec.shards) + " shards + " + nextSpec.xp + " XP.", "#5a5a5a");
+say(playerId, "Next: " + nextSpec.name + " (tier " + nextSpec.tier + ") - " + giver.verb + " " + nextSpec.need + " " + giver.unit + " for " + fmtNum(nextSpec.shards) + " shards + " + questXpFor(playerId, nextSpec.xp) + " XP.", "#5a5a5a");
 if (skillAfter > skillBefore) {
 say(playerId, giver.name + " level up! You are now " + giver.short + " level " + skillAfter + ".", giver.colour);
 try { api.playSound(playerId, "levelup", 1, 1); } catch (e) { }
@@ -3673,7 +3883,7 @@ richSay(playerId, [
 segIcon(giver.icon, giver.colour),
 segText(" " + giver.who + " Lv" + lv + "  ", giver.colour),
 segText("T" + next.tier + " " + next.name + ": " + giver.verb + " " + next.need + " " + giver.unit, "#dddddd"),
-segText("  " + fmtNum(next.shards) + " shards + " + next.xp + " XP", "#ffd75e"),
+segText("  " + fmtNum(next.shards) + " shards + " + questXpFor(playerId, next.xp) + " XP", "#ffd75e"),
 ]);
 continue;
 }
@@ -3682,7 +3892,7 @@ richSay(playerId, [
 segIcon(giver.icon, giver.colour),
 segText(" " + giver.who + " Lv" + lv + "  ", giver.colour),
 segText("T" + (quest.tier || 1) + " " + (quest.name || giver.name) + "  " + giver.verb + " " + quest.have + "/" + quest.need + " " + giver.unit, done ? "#55ff55" : "#dddddd"),
-segText("  " + fmtNum(quest.shards) + " shards + " + quest.xp + " XP", "#ffd75e"),
+segText("  " + fmtNum(quest.shards) + " shards + " + questXpFor(playerId, quest.xp) + " XP", "#ffd75e"),
 segText(done ? "  CLAIM" : "", "#55ff55"),
 ]);
 }
@@ -3703,6 +3913,7 @@ saveStaff();
 }
 const d = ensure(playerId);
 syncQuestTypes(playerId);
+applyPrestige(playerId);
 RT[playerId].minute = Math.floor(d.stats.playtimeMs / 60000);
 RT[playerId].pending = null;
 syncShards(playerId);
@@ -3776,6 +3987,10 @@ cmdRewards(playerId, []);
 onPlayerBoughtShopItem = function (playerId, categoryKey, itemKey, item, userInput) {
 if (!categoryKey) return;
 if (String(categoryKey).indexOf("vb_") !== 0) return;
+if (categoryKey === SHOP_CATS.prestige.key) {
+handlePrestigeBuy(playerId, itemKey);
+return;
+}
 handleStaffMenuBuy(playerId, categoryKey, itemKey, userInput);
 };
 onPlayerKilledOtherPlayer = function (attackingPlayer, killedPlayer, damageDealt, withItem) {
@@ -3817,6 +4032,10 @@ gainXp(playerId, CFG.XP_MINE);
 onPlayerAltAction = function (playerId, x, y, z, block, targetEId) {
 if (!playerId) return;
 if (targetEId) {
+if (PRESTIGE_NPC && targetEId === PRESTIGE_NPC) {
+openPrestigeMenu(playerId);
+return;
+}
 for (const key in QUEST_NPCS) {
 if (QUEST_NPCS[key] === targetEId) {
 questTalkThrottled(playerId, key);
@@ -3880,7 +4099,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-QUEST-13";
+const BUILD = "VB-PRESTIGE-14";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
@@ -3932,6 +4151,10 @@ if (cmd === "weapons" || !wsub) cmdWeapons(playerId);
 else if (wsub === "buy") cmdBuyWeapon(playerId, args);
 else if (wsub === "info") cmdWeaponInfo(playerId, args[2]);
 else cmdWeaponInfo(playerId, args[1]);
+return false;
+}
+if (cmd === "prestige" || cmd === "ascend") {
+cmdPrestige(playerId, args);
 return false;
 }
 if (cmd === "level" || cmd === "lvl" || cmd === "xp") {
