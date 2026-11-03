@@ -44,6 +44,8 @@ METEOR_NEAR_MIN: 56,
 METEOR_NEAR_MAX: 200,
 METEOR_SKY_Y: 140,
 RTP_FLOOR_Y: 64,
+RTP_DROP_Y: 170,
+RTP_SETTLE_MS: 8000,
 WORLD_BORDER: 100000,
 TUTORIAL_GAP_MS: 9000,
 RTP_CENTRE: [0, 0],
@@ -239,6 +241,7 @@ const TUTORIAL_STEPS = [
 let METEOR = null;
 let METEOR_LAST_AT = 0;
 let METEOR_TRY_AT = 0;
+const DROPS = {};
 const TUT = {};
 function meteorSave() {
 const payload = { last: METEOR_LAST_AT, meteor: METEOR };
@@ -577,7 +580,14 @@ say(playerId, "Meteor drop: " + dist + " blocks from the crater, at " + METEOR.x
 say(playerId, "Follow the crystal ring. Next meteor in " + meteorNextText() + ".", "#8a8a8a");
 return true;
 }
-say(playerId, "No safe ground near the meteor - try /meteortp again.", "#ff5555");
+const pullAngle = Math.random() * Math.PI * 2;
+const pullDist = Math.round(CFG.METEOR_TP_MIN + 20 + Math.random() * 40);
+if (dropOnGround(playerId, METEOR.x + Math.cos(pullAngle) * pullDist, METEOR.z + Math.sin(pullAngle) * pullDist)) {
+rt.meteorTpAt = now;
+say(playerId, "The meteor pull drops you above the crater - landing now.", "#b98cff");
+return true;
+}
+say(playerId, "Meteor pull failed - try /meteortp again.", "#ff5555");
 return false;
 }
 function meteorNextText() {
@@ -1766,6 +1776,7 @@ pushRightInfo(playerId, true);
 say(playerId, PANEL_OFF[playerId] ? "Side panel hidden. /panel to bring it back." : "Side panel back on.", "#55ff55");
 }
 function boardTick() {
+settleDrops();
 for (const id in P) {
 setupBoard(id);
 syncBoard(id);
@@ -2854,11 +2865,51 @@ if (y !== null) return [x, y, z];
 }
 return null;
 }
+function dropOnGround(playerId, x, z) {
+if (!playerId) return false;
+const rt = RT[playerId] || (RT[playerId] = {});
+DROPS[playerId] = { x: Math.round(x), z: Math.round(z), at: Date.now() };
+rt.portalCell = null;
+rt.portalSeen = false;
+try {
+api.setPosition(playerId, Math.round(x) + 0.5, CFG.RTP_DROP_Y, Math.round(z) + 0.5);
+} catch (e) {
+noteError("portal drop", e);
+delete DROPS[playerId];
+return false;
+}
+return true;
+}
+function settleDrops() {
+const now = Date.now();
+for (const id in DROPS) {
+const drop = DROPS[id];
+if (!drop || !(id in P) || now - drop.at > CFG.RTP_SETTLE_MS) {
+delete DROPS[id];
+continue;
+}
+const y = findSurface(drop.x, drop.z);
+if (y === null) continue;
+delete DROPS[id];
+try { api.setPosition(id, drop.x + 0.5, y + 0.2, drop.z + 0.5); } catch (e) { continue; }
+say(id, "The void sets you down at " + drop.x + ", " + y + ", " + drop.z + ".", "#b98cff");
+}
+}
 function rtpPlayer(playerId, now) {
 const spot = randomSurfaceSpot();
+const drops = RT[playerId] || (RT[playerId] = {});
 if (!spot) {
-say(playerId, "The portal fizzles: no ground out there.", "#ff5555");
+const angle = Math.random() * Math.PI * 2;
+const dist = Math.round(CFG.RTP_MIN_DIST + Math.random() * (CFG.RTP_RADIUS - CFG.RTP_MIN_DIST));
+const x = Math.round(CFG.RTP_CENTRE[0] + Math.cos(angle) * dist);
+const z = Math.round(CFG.RTP_CENTRE[1] + Math.sin(angle) * dist);
+if (!dropOnGround(playerId, x, z)) {
+say(playerId, "The portal fizzles - try again.", "#ff5555");
 return false;
+}
+drops.portalUntil = (now || Date.now()) + CFG.PORTAL_COOLDOWN_MS;
+say(playerId, "The void hurls you out near " + x + ", " + z + " - landing now.", "#b98cff");
+return true;
 }
 try {
 api.setPosition(playerId, spot[0] + 0.5, spot[1] + 0.2, spot[2] + 0.5);
@@ -4690,7 +4741,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-METEOR-5";
+const BUILD = "VB-RTP-1";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
