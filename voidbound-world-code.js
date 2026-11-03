@@ -1163,7 +1163,7 @@ out.push(segText("\n" + giver.short + "  -", "#5a5a5a"));
 continue;
 }
 const ready = quest.have >= quest.need;
-out.push(segText("\n" + giver.short + " " + quest.have + "/" + quest.need + (ready ? "  ✓" : ""), ready ? "#55ff55" : giver.colour));
+out.push(segText("\n" + giver.short + (quest.name ? " " + quest.name : "") + " " + quest.have + "/" + quest.need + (ready ? "  ✓" : ""), ready ? "#55ff55" : giver.colour));
 }
 }
 function rightInfoText(playerId) {
@@ -1206,7 +1206,7 @@ lines.push("QUESTS");
 for (const key in QUEST_TYPES) {
 const giver = QUEST_TYPES[key];
 const quest = d.quests[key];
-lines.push(quest ? giver.short + " " + quest.have + "/" + quest.need + (quest.have >= quest.need ? "  ✓" : "") : giver.short + "  -");
+lines.push(quest ? giver.short + (quest.name ? " " + quest.name : "") + " " + quest.have + "/" + quest.need + (quest.have >= quest.need ? "  ✓" : "") : giver.short + "  -");
 }
 if (LISTS.events.items.length) lines.push("Event: " + LISTS.events.items[LISTS.events.items.length - 1].text.slice(0, 18));
 lines.push(DISCORD_LINK.replace("https://", ""));
@@ -3551,6 +3551,29 @@ saveNow(playerId);
 pushRightInfo(playerId);
 return d.quests[type];
 }
+function syncQuestType(playerId, type) {
+const d = P[playerId];
+if (!d || !d.quests) return null;
+const quest = d.quests[type];
+if (!quest) return null;
+const skill = skillOf(playerId, type);
+const step = Math.max(Math.max(0, Math.floor(Number(quest.tier) || 1) - 1), Math.max(0, Math.floor(Number(skill.done) || 0)));
+const spec = questSpec(type, step);
+if (quest.name === spec.name && quest.need === spec.need && quest.shards === spec.shards) return quest;
+quest.tier = spec.tier;
+quest.name = spec.name;
+quest.line = spec.line;
+quest.need = spec.need;
+quest.shards = spec.shards;
+quest.xp = spec.xp;
+if (quest.have > quest.need) quest.have = Math.max(0, quest.need);
+saveNow(playerId);
+pushRightInfo(playerId);
+return quest;
+}
+function syncQuestTypes(playerId) {
+for (const key in QUEST_TYPES) syncQuestType(playerId, key);
+}
 function questProgress(playerId, type, amount) {
 const d = P[playerId];
 if (!d || !d.quests) return;
@@ -3569,7 +3592,7 @@ try { api.playSound(playerId, "levelup", 1, 1); } catch (e) { }
 function questTalk(playerId, type) {
 const giver = QUEST_TYPES[type];
 const d = ensure(playerId);
-const quest = d.quests[type];
+const quest = syncQuestType(playerId, type);
 if (!quest) {
 const fresh = assignQuest(playerId, type);
 richSay(playerId, [
@@ -3579,6 +3602,7 @@ segText(fresh.name + " - " + giver.verb + " " + fresh.need + " " + giver.unit + 
 ]);
 if (fresh.line) say(playerId, fresh.line, "#8a8a8a");
 say(playerId, "Tier " + fresh.tier + " reward: " + fmtNum(fresh.shards) + " shards + " + fresh.xp + " XP. Come back when it is done.", "#8a8a8a");
+say(playerId, "My contracts: " + giver.chain.map(function (q) { return q.name; }).join(", ") + ", then endless " + giver.endless.name + ".", "#5a5a5a");
 return;
 }
 if (quest.have < quest.need) {
@@ -3641,7 +3665,7 @@ say(playerId, skillSummary(playerId), "#8a8a8a");
 say(playerId, "Quest givers stand around 10000, -9999, 10000 - right-click one.", "#8a8a8a");
 for (const key in QUEST_TYPES) {
 const giver = QUEST_TYPES[key];
-const quest = d.quests[key];
+const quest = syncQuestType(playerId, key);
 const lv = skillLevel(playerId, key);
 if (!quest) {
 const next = questSpec(key, skillOf(playerId, key).done);
@@ -3678,6 +3702,7 @@ delete STAFF.bans[key];
 saveStaff();
 }
 const d = ensure(playerId);
+syncQuestTypes(playerId);
 RT[playerId].minute = Math.floor(d.stats.playtimeMs / 60000);
 RT[playerId].pending = null;
 syncShards(playerId);
@@ -3855,7 +3880,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-QUEST-12";
+const BUILD = "VB-QUEST-13";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
