@@ -1320,6 +1320,7 @@ say(playerId, "  /quests - your quests and XP", "#ffffff");
 say(playerId, "  /quest <fishing|hunting|mining|killing> - talk to a giver", "#ffffff");
 say(playerId, "  Givers: xVexx the Angler, TECMAN_ the Monster Hunter, Conceptual the Assassin, ItzKasaiXYT the Killer.", "#8a8a8a");
 say(playerId, "  /prestige - BloxdSeno at 50011 60001 49999, right-click at level " + CFG.LEVEL_CAP + ".", "#ffd75e");
+if (isOwner(playerId)) say(playerId, "  /aim <degrees> - turn BloxdSeno, /aim +15 or -15 to nudge", "#ffffff");
 say(playerId, "SERVER", "#55aaff");
 say(playerId, "  /events - scheduled events", "#ffffff");
 say(playerId, "  /event idea <text> - propose an event", "#ffffff");
@@ -1547,7 +1548,48 @@ say(playerId, claimed + "/" + TIME_REWARDS.length + " claimed. /rewards claim ta
 }
 const PRESTIGE_STATS = ["speed", "damage", "health", "xp"];
 const PRESTIGE_NPC_NAME = "BloxdSeno";
+const PRESTIGE_YAW_KEY = "vb_prestige_yaw_v1";
 let PRESTIGE_NPC = null;
+let PRESTIGE_ANGLE = CFG.PRESTIGE_YAW;
+function wrapAngle(value) {
+return ((Math.round(Number(value) || 0) % 360) + 360) % 360;
+}
+function loadPrestigeYaw() {
+let raw = null;
+try { raw = api.getLobbyDbValue(PRESTIGE_YAW_KEY); } catch (e) { raw = null; }
+const value = Number(raw);
+PRESTIGE_ANGLE = raw !== null && raw !== undefined && raw !== "" && isFinite(value) ? wrapAngle(value) : wrapAngle(CFG.PRESTIGE_YAW);
+}
+function prestigeYaw() {
+return PRESTIGE_ANGLE;
+}
+function applyPrestigeYaw() {
+if (!PRESTIGE_NPC) return;
+try { api.setEntityRotation(PRESTIGE_NPC, 0, prestigeYaw(), 0); } catch (e) { }
+}
+function setPrestigeYaw(playerId, degrees) {
+PRESTIGE_ANGLE = wrapAngle(degrees);
+try { api.setLobbyDbValue(PRESTIGE_YAW_KEY, String(PRESTIGE_ANGLE)); } catch (e) { noteError("prestige yaw save", e); }
+applyPrestigeYaw();
+say(playerId, PRESTIGE_NPC_NAME + " now faces yaw " + prestigeYaw() + " degrees.", "#55ff55");
+}
+function cmdAim(playerId, args) {
+if (!isOwner(playerId)) return deny(playerId, "aim");
+const raw = String(args[1] || "").trim();
+if (!raw) {
+say(playerId, PRESTIGE_NPC_NAME + " angle: " + prestigeYaw() + " degrees (default " + wrapAngle(CFG.PRESTIGE_YAW) + ").", "#b48cff");
+say(playerId, "/aim 90 sets it. /aim +15 or /aim -15 nudges it.", "#ffffff");
+return false;
+}
+const value = Number(raw);
+if (!isFinite(value)) {
+say(playerId, "Usage: /aim <degrees>  or  /aim +15 / /aim -15", "#ff5555");
+return false;
+}
+const relative = raw.charAt(0) === "+" || raw.charAt(0) === "-";
+setPrestigeYaw(playerId, relative ? prestigeYaw() + value : value);
+return false;
+}
 function prestigeData(playerId) {
 const d = ensure(playerId);
 if (!d.prestige || typeof d.prestige !== "object") d.prestige = { count: 0, speed: 0, damage: 0, health: 0, xp: 0 };
@@ -1729,7 +1771,7 @@ try { eId = api.attemptCreateMeshEntity("Person", { size: 1.2, pose: "standing" 
 if (!eId) return;
 PRESTIGE_NPC = eId;
 try { api.setPosition(eId, CFG.PRESTIGE_POS[0], CFG.PRESTIGE_POS[1], CFG.PRESTIGE_POS[2]); } catch (e) { noteError("prestige pos", e); }
-try { api.setEntityRotation(eId, 0, CFG.PRESTIGE_YAW, 0); } catch (e) { noteError("prestige yaw", e); }
+try { api.setEntityRotation(eId, 0, prestigeYaw(), 0); } catch (e) { noteError("prestige yaw", e); }
 applyPrestigeNameTag();
 }
 function setOverallLevel(playerId, level) {
@@ -3659,7 +3701,7 @@ applyGiverYaw(type);
 }
 function healGiverAims() {
 for (const key in QUEST_NPCS) applyGiverYaw(key);
-if (PRESTIGE_NPC) try { api.setEntityRotation(PRESTIGE_NPC, 0, CFG.PRESTIGE_YAW, 0); } catch (e) { }
+applyPrestigeYaw();
 }
 function applyGiverYaw(type) {
 const eId = QUEST_NPCS[type];
@@ -3671,6 +3713,7 @@ const ids = [];
 for (const key in QUEST_NPCS) ids.push(key + "=" + QUEST_NPCS[key]);
 say(playerId, "VOIDBOUND DIAG", "#ffcc00");
 say(playerId, "givers " + ids.length + "/4  prestige " + (PRESTIGE_NPC ? "up" : "missing") + "  " + (ids.join("  ") || "none spawned"), "#8a8a8a");
+say(playerId, "prestige yaw " + prestigeYaw() + " (default " + wrapAngle(CFG.PRESTIGE_YAW) + ") - owner /aim <degrees>", "#8a8a8a");
 say(playerId, "side panel " + (PANEL_OFF[playerId] ? "hidden by /panel" : "on"), "#8a8a8a");
 for (const key in QUEST_TYPES) {
 say(playerId, "  " + key + " skin " + giverSkin(key) + " yaw " + Math.round(giverYaw(key)) + " nudge " + (GIVER_YAW[key] || 0), "#8a8a8a");
@@ -4099,7 +4142,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-PRESTIGE-14";
+const BUILD = "VB-PRESTIGE-15";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
@@ -4155,6 +4198,10 @@ return false;
 }
 if (cmd === "prestige" || cmd === "ascend") {
 cmdPrestige(playerId, args);
+return false;
+}
+if (cmd === "aim" || cmd === "seno" || cmd === "bloxdseno") {
+cmdAim(playerId, args);
 return false;
 }
 if (cmd === "level" || cmd === "lvl" || cmd === "xp") {
@@ -4318,6 +4365,11 @@ try {
 loadGiverSkins();
 } catch (e) {
 noteError("giver skins", e);
+}
+try {
+loadPrestigeYaw();
+} catch (e) {
+noteError("prestige yaw", e);
 }
 try {
 setupQuestGivers();
