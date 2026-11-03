@@ -408,6 +408,8 @@ METEOR = { x: spot.x, y: spot.y, z: spot.z, loot: loot, at: Date.now(), filled: 
 METEOR_LAST_AT = METEOR.at;
 buildMeteor(METEOR);
 meteorSave();
+sfxNear("ominousBellHit", [METEOR.x, METEOR.y, METEOR.z], 1, 0.8, 1500);
+sfxNear("hauntedHorrorImpact", [METEOR.x, METEOR.y, METEOR.z], 1, forced ? 0.7 : 0.9, 1100);
 if (!quiet) {
 if (forced) {
 meteorSay("A METEOR smashed into the ground at " + METEOR.x + ", " + METEOR.z + " and carved its own crater.", "#ff9c55");
@@ -430,6 +432,8 @@ if (!spot) continue;
 if (Math.abs(spot.x - METEOR.x) > CFG.METEOR_FILL_RANGE || Math.abs(spot.z - METEOR.z) > CFG.METEOR_FILL_RANGE) continue;
 if (Math.abs(spot.y - METEOR.y) > 48) continue;
 if (fillMeteorChest(id)) {
+sfx(id, "chestOpen", 1, 1);
+sfx(id, "magicAccent2", 0.9, 1.2);
 say(id, "The meteor chest unlocks as you reach the ring.", "#ff9c55");
 say(id, "Gear: " + METEOR.loot + " (enchanted " + CFG.METEOR_ENCHANT + "), plus " + METEOR_EXTRAS.length + " stacks of gems and ore.", "#b48cff");
 }
@@ -455,10 +459,12 @@ try { api.applyEffect(id, METEOR_EFFECTS[i], 8); } catch (e) { }
 }
 if (!rt.meteorOn) {
 rt.meteorOn = true;
+sfx(id, "magicAccent3", 1, 1.1);
 say(id, "METEOR CORE - full Amethite set: speed, damage, regeneration and damage reduction.", "#ff9c55");
 }
 } else if (rt.meteorOn) {
 rt.meteorOn = false;
+sfx(id, "chestClose", 0.7, 0.75);
 for (let i = 0; i < METEOR_EFFECTS.length; i++) {
 try { api.removeEffect(id, METEOR_EFFECTS[i]); } catch (e) { }
 }
@@ -480,6 +486,7 @@ const nx = Math.max(-lim, Math.min(lim, spot.x));
 const nz = Math.max(-lim, Math.min(lim, spot.z));
 try { api.setPosition(id, nx, spot.y, nz); } catch (e) { continue; }
 say(id, "The Void border turns you back at " + fmtNum(lim) + " blocks out.", "#ff5555");
+sfx(id, "ominousBellHit", 0.7, 0.6);
 }
 }
 function cmdMeteorTp(playerId) {
@@ -501,7 +508,9 @@ const z = Math.round(METEOR.z + Math.sin(angle) * dist);
 if (Math.abs(x) > CFG.WORLD_BORDER - 100 || Math.abs(z) > CFG.WORLD_BORDER - 100) continue;
 const y = findSurface(x, z);
 if (y === null) continue;
+sfx(playerId, "zapAccent1", 0.9, 1.25);
 try { api.setPosition(playerId, x, y, z); } catch (e) { continue; }
+sfx(playerId, "zapAccent2", 0.9, 1);
 rt.meteorTpAt = now;
 say(playerId, "Meteor drop: " + dist + " blocks from the crater, at " + METEOR.x + ", " + METEOR.z + ".", "#b48cff");
 say(playerId, "Follow the crystal ring. Next meteor in " + meteorNextText() + ".", "#8a8a8a");
@@ -652,6 +661,7 @@ if (d.shards < a.price) out.push(fmtNum(a.price) + " " + CFG.CURRENCY_NAME + " (
 return out;
 }
 function applyArmourAbility(playerId, a) {
+sfx(playerId, "magicAccent4", 0.7, 1.15);
 if (!a || !a.ability) return false;
 try {
 api.applyEffect(playerId, a.ability.effect, 8);
@@ -740,6 +750,7 @@ if (armourEquipped(playerId, ARMOUR[i])) return ARMOUR[i];
 return null;
 }
 function breakArmour(playerId, a) {
+sfx(playerId, "glass2", 0.9, 0.8);
 const d = ensure(playerId);
 if (d.stats.armour) delete d.stats.armour[a.id];
 if (!d.stats.armourDur) d.stats.armourDur = {};
@@ -1246,6 +1257,14 @@ return NAMED_COLOURS[key] || key || "white";
 function styleFor(hex) {
 const value = colourName(hex);
 return { color: value, colour: value };
+}
+function sfx(playerId, name, volume, rate) {
+if (!playerId || !name) return;
+try { api.playSound(playerId, name, volume === undefined ? 0.9 : volume, rate === undefined ? 1 : rate); } catch (e) { }
+}
+function sfxNear(name, pos, volume, rate, dist) {
+if (!name) return;
+try { api.broadcastSound(name, volume === undefined ? 0.9 : volume, rate === undefined ? 1 : rate, { playerIdOrPos: pos, maxHearDist: dist || 800 }); } catch (e) { }
 }
 function say(playerId, text, colour) {
 if (!colour) {
@@ -2086,7 +2105,8 @@ const left = prestigeUnspent(playerId);
 say(playerId, "PRESTIGE " + p.count + "/" + CFG.PRESTIGE_MAX + "! Back to level 1 with " + left + " prestige shard" + (left === 1 ? "" : "s") + " to spend.", "#ffd75e");
 say(playerId, "Each shard is +5%: /prestige speed | damage | health | xp", "#b48cff");
 say(playerId, p.count >= CFG.PRESTIGE_MAX ? "Prestige maxed - the level cap is gone, climb forever." : "Level cap stays " + CFG.LEVEL_CAP + " until prestige " + CFG.PRESTIGE_MAX + ".", "#8a8a8a");
-try { api.playSound(playerId, "levelup", 1, 1); } catch (e) { }
+sfx(playerId, "trumpetFlare", 1, 1);
+sfx(playerId, "ominousBellHit", 0.9, 0.7);
 return true;
 }
 function spendPrestige(playerId, key) {
@@ -2110,7 +2130,7 @@ saveNow(playerId);
 pushRightInfo(playerId, true);
 renderPrestigeMenu(playerId);
 say(playerId, "Prestige " + key + " +" + Math.round((prestigeMultiplier(playerId, key) - 1) * 100) + "%  |  " + prestigeUnspent(playerId) + " shards left.", "#55ff55");
-try { api.playSound(playerId, "levelup", 1, 1); } catch (e) { }
+sfx(playerId, "magicAccent1", 0.9, 1.1);
 return true;
 }
 function cmdPrestige(playerId, args) {
@@ -2867,6 +2887,7 @@ api.applyEffect(playerId, CFG.ARENA_GRACE_EFFECT, CFG.ARENA_GRACE_MS / 1000);
 } catch (e) {
 noteError("arena grace", e);
 }
+sfx(playerId, "zapAccent2", 0.9, 1.15);
 say(playerId, "PVP ARENA - " + Math.round(CFG.ARENA_GRACE_MS / 1000) + "s grace, nothing can hit you.", "#55aaff");
 return true;
 }
@@ -2883,6 +2904,7 @@ const rt = RT[playerId] || (RT[playerId] = {});
 rt.portalUntil = (now || Date.now()) + CFG.PORTAL_COOLDOWN_MS;
 rt.portalCell = null;
 rt.portalSeen = false;
+sfx(playerId, "zapAccent2", 0.9, 0.75);
 say(playerId, "The black portal drags you to " + dest[0] + ", " + dest[1] + ", " + dest[2] + ".", "#b98cff");
 return true;
 }
@@ -3958,7 +3980,8 @@ saveNow(playerId);
 pushRightInfo(playerId);
 if (!d) return level;
 say(playerId, "Overall level " + level + "  |  " + xpIntoLevel(d.stats.xp) + "/" + xpToNextLevel(d.stats.xp) + " to level " + (level + 1), "#55ff55");
-try { api.playSound(playerId, "levelup", 1, 1); } catch (e) { }
+sfx(playerId, "exp_levelup", 1, 1);
+if (level % 10 === 0) sfx(playerId, "trumpetFlare", 1, 1);
 return level;
 }
 function cmdLevel(playerId) {
@@ -4287,7 +4310,7 @@ saveNow(playerId);
 pushRightInfo(playerId);
 say(playerId, "Quest complete: " + (quest.name || giver.name) + " - " + giver.verb + " " + quest.need + " " + giver.unit + ".", giver.colour);
 say(playerId, "Claim it with " + giver.who + " for " + fmtNum(quest.shards) + " shards and " + questXpFor(playerId, quest.xp) + " XP.", "#ffd75e");
-try { api.playSound(playerId, "levelup", 1, 1); } catch (e) { }
+sfx(playerId, "exp_collect", 0.9, 1.1);
 }
 function questTalk(playerId, type) {
 const giver = QUEST_TYPES[type];
@@ -4333,6 +4356,7 @@ segText("Quest complete! ", "#55ff55"),
 segText("+" + fmtNum(shards) + " shards", "#ffd75e"),
 segText("  +" + xp + " XP", "#b48cff"),
 ]);
+sfx(playerId, "cashRegister", 1, 1);
 say(playerId, giver.short + " level " + skillAfter + "  |  " + xpIntoLevel(skill.xp) + "/" + xpToNextLevel(skill.xp) + " to level " + (skillAfter + 1), "#8a8a8a");
 say(playerId, "Next: " + nextSpec.name + " (tier " + nextSpec.tier + ") - " + giver.verb + " " + nextSpec.need + " " + giver.unit + " for " + fmtNum(nextSpec.shards) + " shards + " + questXpFor(playerId, nextSpec.xp) + " XP.", "#5a5a5a");
 if (skillAfter > skillBefore) {
@@ -4601,7 +4625,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-METEOR-3";
+const BUILD = "VB-SFX-1";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
