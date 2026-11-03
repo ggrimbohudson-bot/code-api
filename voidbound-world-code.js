@@ -402,6 +402,7 @@ for (let dx = -4; dx <= 4; dx++) {
 for (let dz = -4; dz <= 4; dz++) {
 const ring = Math.abs(dx) + Math.abs(dz);
 if (ring > 5) continue;
+if (dx === 0 && dz === 0) continue;
 let by = meteorGround(m.x + dx, m.z + dz);
 if (by === null) by = m.y;
 meteorSetBlock(m.x + dx, by, m.z + dz, ring <= 2 ? "Obsidian" : "Crystal Block");
@@ -411,15 +412,23 @@ if (meteorFoliage(blockNameAt(m.x + dx, by + dy, m.z + dz))) meteorSetBlock(m.x 
 }
 }
 }
-for (let dy = 1; dy <= 8; dy++) meteorSetBlock(m.x, m.y + dy, m.z, "Air");
+for (let dy = 0; dy <= 8; dy++) meteorSetBlock(m.x, m.y + dy, m.z, "Air");
 m.chest = [m.x, m.y, m.z];
-meteorSetBlock(m.x, m.y, m.z, "Chest [R]");
+meteorSetBlock(m.x, m.y, m.z, "Chest");
 }
 function meteorAttrs(item) {
 try { return api.createEnchantmentAttributesForItem(item, CFG.METEOR_ENCHANT); } catch (e) { noteError("meteor enchant", e); return null; }
 }
+function meteorEnsureChest() {
+if (!METEOR || !METEOR.chest) return false;
+const pos = METEOR.chest;
+if (blockIsChest(blockNameAt(pos[0], pos[1], pos[2]))) return true;
+meteorSetBlock(pos[0], pos[1], pos[2], "Chest");
+return blockIsChest(blockNameAt(pos[0], pos[1], pos[2]));
+}
 function fillMeteorChest(playerId) {
 if (!METEOR || METEOR.filled || !playerId) return false;
+meteorEnsureChest();
 const attrs = meteorAttrs(METEOR.loot);
 try {
 if (attrs) api.setStandardChestItemSlot(METEOR.chest, 0, METEOR.loot, 1, playerId, attrs);
@@ -2780,6 +2789,9 @@ return String(api.getBlock(Math.floor(x), Math.floor(y), Math.floor(z)) || "");
 return "";
 }
 }
+function blockIsChest(name) {
+return String(name || "").toLowerCase().indexOf("chest") >= 0;
+}
 function isPortalBlock(name) {
 return String(name || "").toLowerCase().indexOf("portal") !== -1;
 }
@@ -4678,7 +4690,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-METEOR-4";
+const BUILD = "VB-METEOR-5";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
