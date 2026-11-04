@@ -103,7 +103,7 @@ const CFG = {
 	HUD_EVERY_MS: 1200,
 	ATMOS_EVERY_MS: 1500,
 	SAVE_EVERY_MS: 30000,
-	CLEAN_EVERY_MS: 1000,
+	MOB_EVERY_MS: 200,
 	SANITY_EVERY_MS: 250,
 
 	ADMIN_NAMES: ["xvexx", "bloxdvoid_yt"],
@@ -310,6 +310,7 @@ function pstate(id) {
 			sanity: CFG.SANITY_MAX,
 			lastHud: 0,
 			lastAtmos: 0,
+			lastSanity: 0,
 			fogUntil: 0,
 			darkUntil: 0,
 			bloodUntil: 0,
@@ -1192,7 +1193,6 @@ function lerpHex(a, b, t) {
 function nightProgress() {
 	if (RUN.phase === "night") return clamp(RUN.phaseMs / (CFG.NIGHT_MINUTES * 60000), 0, 1);
 	if (RUN.phase === "dusk") return 0;
-	if (RUN.phase === "dawn") return 1;
 	return null;
 }
 
@@ -1304,7 +1304,7 @@ function hudText(id) {
 	if (RUN.phase === "night") {
 		lines.push("Night " + RUN.eventsDone + "/" + RUN.eventsTonight);
 	}
-	if (!RUN.running) lines.push("RUN PAUSED — /horror start");
+	if (!RUN.running) lines.push("RUN PAUSED — /" + CFG.START_COMMAND + " to begin");
 	return lines.join("\n");
 }
 
@@ -1341,6 +1341,10 @@ function nearestHorrorDistance(id) {
 		const mobPos = safe(() => api.getPosition(rec.id));
 		if (!mobPos) continue;
 		const d = dist3(pos, mobPos);
+		if (d < best) best = d;
+	}
+	for (const key in MESH) {
+		const d = dist3(pos, MESH[key].center);
 		if (d < best) best = d;
 	}
 	return best;
@@ -1697,16 +1701,14 @@ function tagTorch(id) {
 	if (!pos) return;
 	const R = CFG.TORCH_RADIUS;
 	const found = [];
-	for (let dx = -R; dx <= R; dx += 2) {
-		for (let dz = -R; dz <= R; dz += 2) {
-			for (let dy = -3; dy <= 5; dy++) {
-				const x = Math.round(pos[0]) + dx;
-				const y = Math.round(pos[1]) + dy;
-				const z = Math.round(pos[2]) + dz;
-				const b = blockAt(x, y, z);
-				if (b && b.indexOf("Torch") !== -1) found.push([x, y, z]);
-			}
-		}
+	// sample the area instead of sweeping it: a full sweep is thousands of
+	// getBlock calls inside a single tick
+	for (let i = 0; i < 140; i++) {
+		const x = Math.round(pos[0]) + irand(-R, R);
+		const y = Math.round(pos[1]) + irand(-4, 5);
+		const z = Math.round(pos[2]) + irand(-R, R);
+		const b = blockAt(x, y, z);
+		if (b && b.indexOf("Torch") !== -1) found.push([x, y, z]);
 	}
 	if (found.length === 0) {
 		say(id, "Something is blowing out the lights you cannot see.", "#6e6e6e");
@@ -2161,7 +2163,11 @@ function vanishScare(mobId, id, text) {
 	if (text) safe(() => api.queueMiddleTextLower(id, text, 3200));
 }
 
+let lastMobAt = 0;
+
 function tickMobs() {
+	if (NOW - lastMobAt < CFG.MOB_EVERY_MS) return;
+	lastMobAt = NOW;
 	const live = safe(() => api.getMobIds()) || [];
 	const liveSet = {};
 	for (let i = 0; i < live.length; i++) liveSet[String(live[i])] = true;
@@ -2185,7 +2191,8 @@ function tickMobs() {
 		const pos = safe(() => api.getPosition(rec.id));
 		const ppos = playerPos(id);
 
-		if (rec.expireAt && NOW > rec.expireAt && rec.role !== "boss") {
+		if (rec.expireAt && NOW > rec.expireAt) {
+			if (rec.role === "boss") shout("\u2620 " + rec.name + " lost interest and left.", "yellow");
 			removeMob(rec.id);
 			continue;
 		}
@@ -2294,11 +2301,18 @@ function tickCycle(dt) {
 
 function tickPlayers(dt) {
 	const ids = online();
-	const dtSec = dt / 1000;
 	for (let i = 0; i < ids.length; i++) {
 		const id = ids[i];
 		const st = pstate(id);
-		updateSanity(id, dtSec);
+
+		// sanity does ground scans and mob distance checks, so run it at a
+		// fixed low rate instead of 20 times a second
+		if (NOW - (st.lastSanity || 0) >= CFG.SANITY_EVERY_MS) {
+			const step = st.lastSanity ? (NOW - st.lastSanity) / 1000 : CFG.SANITY_EVERY_MS / 1000;
+			st.lastSanity = NOW;
+			updateSanity(id, step);
+		}
+
 		updateHud(id);
 		if (NOW - st.lastAtmos > CFG.ATMOS_EVERY_MS) {
 			st.lastAtmos = NOW;
@@ -2349,7 +2363,11 @@ onPlayerJoin = function (playerId) {
 	const st = pstate(playerId);
 	st.lastHud = 0;
 	st.lastAtmos = 0;
-	later(1200, () => welcome(playerId));
+	st.lastSanity = 0;
+	later(1200, () => {
+		if (online().indexOf(playerId) === -1) return;
+		welcome(playerId);
+	});
 };
 
 onPlayerLeave = function (playerId) {
@@ -2565,7 +2583,7 @@ function startRun(playerId) {
 		say(playerId, "The run is already going. Day " + RUN.day + ".", "yellow");
 		return false;
 	}
-	// a finished run starts over; a stopped run resumes where it left off
+	// a finished run starts over; a stopped run restarts its current day at dawn
 	if (RUN.day >= CFG.MAX_DAY) {
 		RUN.day = 1;
 		RUN.deaths = 0;
