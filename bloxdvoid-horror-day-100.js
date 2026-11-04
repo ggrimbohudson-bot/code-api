@@ -1,10 +1,18 @@
 /* ============================================================================
-   SWORD4000 HORROR — 100 DAYS
+   BLOXDVOID_YT HORROR — 100 DAYS
    A drop-in Bloxd World Code horror survival mode.
 
    THE IDEA
    A "benefactor" adds ONE new horror to the world every day. Horrors never
    leave, so night 40 is running all 40 of them at once. Survive to day 100.
+
+   THE HORRORS ARE CUSTOM MODELS
+   The big scares are not stock mobs: they are figures built from mesh
+   entities (boxes and blocks) that are moved every fraction of a second.
+   There is the tall Watcher that only moves while unseen, the floating
+   Hollow, a swirling shadow swarm, a rune obelisk that appears near your
+   base, and the Benefactor who visits each dawn. Turn them off with
+   CFG.ENABLE_CUSTOM_MESHES = false and the mode falls back to horror mobs.
 
    HOW TO INSTALL
    1. Open your world, press F8 (World Code).
@@ -18,10 +26,11 @@
    the trigger owner-only. /horror start always works for admins.
 
    PACING (change in CFG below)
-   - Day phase:   20 real minutes of safe building/looting
+   - Day phase:   5 real minutes of safe building/looting
    - Night phase: 10 real minutes of horror
-   - A full day is 30 minutes, day 100 is roughly 50 hours of raw footage.
-     Shorten CFG.DAY_MINUTES / CFG.NIGHT_MINUTES for a faster series.
+   - A full day is 15 minutes, day 100 is roughly 25 hours of raw footage.
+     Change CFG.DAY_MINUTES / CFG.NIGHT_MINUTES at any time, or use
+     /horror length <dayMin> <nightMin> while the world is running.
 
    WHAT HAPPENS EACH DAY
    - Dawn: the new horror is announced by name, with a line from "???".
@@ -41,7 +50,9 @@
    /horror mod <day>           read one horror's card
    /horror test <tag>          fire one horror behaviour now (admin)
    /horror boss                summon this day's boss (admin)
-   /horror clear               despawn every horror mob (admin)
+   /horror clear               despawn every horror mob and mesh (admin)
+   /horror meshes              list active custom mesh models (admin)
+   /horror say <voice> <text>  speak a styled line as a character (admin)
    /horror sanity <0-100>      set your sanity (admin)
    /horror length <dayMin> <nightMin>   retune the clock (admin)
    /horror reset               wipe the run and start over (admin)
@@ -49,6 +60,7 @@
    TEST TAGS
    fog footsteps stalker sound herald cave whisper torch beast grave mirror
    dark hunter swarm wraith blood abduction possession quake silence titan
+   watcher hollow shadow obelisk
    ============================================================================ */
 
 const CFG = {
@@ -58,7 +70,7 @@ const CFG = {
 
 	// clock (real minutes)
 	MAX_DAY: 100,
-	DAY_MINUTES: 20,
+	DAY_MINUTES: 5,
 	NIGHT_MINUTES: 10,
 	DAWN_MS: 6000,
 	DUSK_MS: 12000,
@@ -102,6 +114,11 @@ const CFG = {
 	// (they open the admin menu instead).
 	START_COMMAND: "survive",
 	ANYONE_CAN_START: true,
+
+	// custom mesh models (the horror figures themselves)
+	ENABLE_CUSTOM_MESHES: true,
+	MAX_MESH_MODELS: 4,
+	MESH_EVERY_MS: 120,
 };
 
 /* ---------------------------------------------------------------------------
@@ -113,7 +130,7 @@ const CFG = {
 const HORRORS = [
 	[1, "The Fog That Breathes", ["fog"], "The fog arrives. It does not leave when you look away."],
 	[2, "Footsteps Behind You", ["footsteps"], "There is nobody there. There is always somebody there."],
-	[3, "The Watcher in the Trees", ["stalker"], "It stands at the edge of the light and waits for you to notice."],
+	[3, "The Watcher in the Trees", ["stalker", "watcher"], "It stands at the edge of the light and waits for you to notice."],
 	[4, "Knocking at the Door", ["sound", "herald"], "Three knocks. Your door is not the one being knocked on."],
 	[5, "Something in the Cellar", ["cave"], "It only exists where the light does not."],
 	[6, "The Whispers", ["whisper"], "It knows your name. It knows what you did yesterday."],
@@ -138,7 +155,7 @@ const HORRORS = [
 	[23, "The Tremor", ["quake"], "The ground remembers something you do not."],
 	[24, "The Silence", ["silence", "dark"], "No wind. No mobs. No music. Just you breathing."],
 	[25, "THE TITAN", ["titan", "quake"], "The first of the four. It does not hide."],
-	[26, "The Second Sun", ["dark", "blood"], "The sun rises and gives no light at all."],
+	[26, "The Second Sun", ["dark", "blood", "shadow"], "The sun rises and gives no light at all."],
 	[27, "The Flayed Choir", ["whisper", "swarm"], "They sing while they walk toward you."],
 	[28, "The Whispering Woods", ["stalker", "whisper"], "Every tree has a voice and every voice has a plan."],
 	[29, "The Gravekeeper", ["grave", "possession"], "It is planting something in your yard."],
@@ -151,13 +168,13 @@ const HORRORS = [
 	[35, "The Pale Riders", ["hunter", "beast"], "They do not walk. They arrive."],
 	[36, "The Empty Village", ["herald", "silence"], "Everyone left. Nobody left. There is a difference."],
 	[37, "The Screaming Trees", ["sound", "stalker"], "The forest has started to make a noise that is not wind."],
-	[38, "The Bone Orchard", ["grave", "beast"], "Something is growing where the graves are. It is hungry."],
+	[38, "The Bone Orchard", ["grave", "beast", "hollow"], "Something is growing where the graves are. It is hungry."],
 	[39, "The Shifting Dark", ["dark", "wraith"], "The dark is not empty. It is occupied."],
 	[40, "THE DRAUGR KING", ["wraith", "hunter", "swarm"], "The dead have a king and he has been looking for a kingdom."],
 
 	[41, "The Stalking Season", ["stalker", "hunter"], "It is not a night anymore. It is a season."],
 	[42, "The Feast", ["possession", "beast"], "Something has been eating your animals. It has been leaving the bones in a pattern."],
-	[43, "The Mirror House", ["mirror", "abduction"], "You will step through a door and not come out where you went in."],
+	[43, "The Mirror House", ["mirror", "abduction", "watcher"], "You will step through a door and not come out where you went in."],
 	[44, "The Drowning", ["footsteps", "abduction"], "The floor feels like deep water now."],
 	[45, "The Cold Sun", ["dark", "fog"], "Daylight no longer means safe."],
 	[46, "The Rot", ["swarm", "possession"], "It spreads from the animals to the ground to the air."],
@@ -175,7 +192,7 @@ const HORRORS = [
 	[57, "The Hollow Choir", ["whisper", "silence"], "It sings in the gaps between sounds."],
 	[58, "The Grave Tide", ["grave", "swarm"], "The graves are multiplying and something is climbing out."],
 	[59, "The Long Night", ["fog", "dark", "sound"], "This night will feel like three."],
-	[60, "THE CRONE", ["wraith", "whisper", "abduction"], "She collects people. She has a very organised collection."],
+	[60, "THE CRONE", ["wraith", "whisper", "abduction", "hollow"], "She collects people. She has a very organised collection."],
 
 	[61, "The Flesh Market", ["possession", "sound"], "Something is trading in the village. It is not using coins."],
 	[62, "The Shambling Dead", ["swarm", "hunter"], "They are slow until they are not."],
@@ -185,7 +202,7 @@ const HORRORS = [
 	[66, "The Doorway", ["herald", "quake"], "A door has appeared. It is open. It was not there yesterday."],
 	[67, "The Rotting Choir", ["whisper", "beast"], "It sounds like a hymn and it sounds like chewing."],
 	[68, "The Puppeteer", ["possession", "abduction"], "Everything you meet tonight is being worn."],
-	[69, "The Fog Walker", ["fog", "stalker", "dark"], "The fog is closer. The fog is breathing."],
+	[69, "The Fog Walker", ["fog", "stalker", "dark", "watcher"], "The fog is closer. The fog is breathing."],
 	[70, "THE HOLLOW HUNT", ["hunter", "stalker", "wraith"], "The hunt does not end at dawn now. It only pauses."],
 
 	[71, "The Drowned Choir", ["whisper", "footsteps", "dark"], "The whole world sounds like it is underwater."],
@@ -197,29 +214,29 @@ const HORRORS = [
 	[77, "The Swarm Eternal", ["swarm", "hunter"], "They do not stop coming. They have never stopped coming."],
 	[78, "The Silence Below", ["silence", "cave"], "Down there, the quiet is worse than the noise."],
 	[79, "The Grave That Follows", ["grave", "stalker"], "You will bury it. It will be back at dawn."],
-	[80, "The Long Stare", ["stalker", "dark", "whisper"], "It has stopped hiding. It wants you to see it now."],
+	[80, "The Long Stare", ["stalker", "dark", "whisper", "watcher"], "It has stopped hiding. It wants you to see it now."],
 
 	[81, "The Unmaking", ["quake", "abduction", "swarm"], "The world is being taken apart around you."],
 	[82, "The Choir of Teeth", ["whisper", "beast"], "It sings with a mouth you cannot see."],
-	[83, "The Lightless", ["torch", "dark", "fog"], "The dark has a shape now. The shape is getting closer."],
+	[83, "The Lightless", ["torch", "dark", "fog", "shadow"], "The dark has a shape now. The shape is getting closer."],
 	[84, "The Second Face", ["mirror", "possession", "abduction"], "There is a face in the window. It is yours. You are not at the window."],
 	[85, "The Red Harvest", ["blood", "hunter", "beast"], "The world is ripe. It is harvesting."],
 	[86, "The Deep Choir", ["cave", "whisper", "wraith"], "The caves have learned to speak in harmony."],
 	[87, "The Endless Corridor", ["mirror", "silence", "footsteps"], "You will run and you will arrive in the same room."],
 	[88, "The Rotting Hunt", ["swarm", "possession", "hunter"], "Everything is hunting. Everything is being worn."],
 	[89, "The Cold Below", ["cave", "dark", "quake"], "It is directly under you. It has been for weeks."],
-	[90, "THE PALE MOTHER", ["beast", "possession", "whisper"], "She made all of them. She is coming to collect."],
+	[90, "THE PALE MOTHER", ["beast", "possession", "whisper", "hollow"], "She made all of them. She is coming to collect."],
 
 	[91, "The Gathering", ["stalker", "swarm"], "They are not attacking yet. They are just arriving."],
 	[92, "The Fog That Eats", ["fog", "dark", "hunter"], "The fog is thinner than it was. Something is in it that is not fog."],
 	[93, "The Last Laugh", ["herald", "whisper", "sound"], "It has started using the chat to talk to you."],
 	[94, "The Broken Mirror", ["mirror", "abduction", "dark"], "Every reflection is one second behind. Then it is not."],
-	[95, "The Grave World", ["grave", "swarm", "blood"], "The whole world is a graveyard now. You are the only thing not buried."],
+	[95, "The Grave World", ["grave", "swarm", "blood", "obelisk"], "The whole world is a graveyard now. You are the only thing not buried."],
 	[96, "The Hollow Choir Rises", ["whisper", "silence", "wraith"], "The singing stopped. That is worse."],
 	[97, "The Drowned Hunt", ["footsteps", "hunter", "beast"], "The wet footsteps are running now."],
 	[98, "The Thing at the Door", ["herald", "abduction", "quake"], "It is knocking. It has been knocking for an hour."],
-	[99, "THE LAST NIGHT", ["fog", "dark", "blood", "hunter"], "Everything is awake. Everything is coming."],
-	[100, "DAY 100: THE FINAL", ["titan", "fog", "blood", "swarm", "hunter", "dark", "whisper", "quake"], "There is nothing left to add. So it is all coming at once."],
+	[99, "THE LAST NIGHT", ["fog", "dark", "blood", "hunter", "watcher"], "Everything is awake. Everything is coming."],
+	[100, "DAY 100: THE FINAL", ["titan", "fog", "blood", "swarm", "hunter", "dark", "whisper", "quake", "watcher", "hollow", "shadow"], "There is nothing left to add. So it is all coming at once."],
 ];
 
 /* ---------------------------------------------------------------------------
@@ -370,6 +387,93 @@ function say(id, text, colour) {
 
 function shout(text, colour) {
 	safe(() => api.broadcastMessage(text, { color: colour || "#d8d8d8" }));
+}
+
+/* ---------------------------------------------------------------------------
+   CUSTOM SAY
+   Styled speakers instead of flat chat lines. Every line can appear in chat
+   with a coloured speaker tag, in the dialogue panel with a voice, and with
+   its own sting. Used for the benefactor, whispers and fourth-wall messages.
+   --------------------------------------------------------------------------- */
+const VOICES = {
+	benefactor: {
+		label: "THE BENEFACTOR",
+		colour: "#d4af37",
+		voice: "posh",
+		sound: "ominousBellHit",
+		volume: 0.22,
+	},
+	unknown: {
+		label: "???",
+		colour: "#9a9a9a",
+		voice: "dark",
+		sound: "futureStrangePulse",
+		volume: 0.25,
+	},
+	watcher: {
+		label: "THE WATCHER",
+		colour: "#c23b3b",
+		voice: "gruff",
+		sound: "stalkerIdle1",
+		volume: 0.3,
+	},
+	crone: {
+		label: "THE CRONE",
+		colour: "#b06bd6",
+		voice: "soft",
+		sound: "wraithGrunt1",
+		volume: 0.3,
+	},
+	system: {
+		label: "HORROR",
+		colour: "#a83232",
+		voice: null,
+		sound: null,
+		volume: 0,
+	},
+};
+
+function speakStyle(v) {
+	return { color: v.colour, colour: v.colour, fontWeight: "bold" };
+}
+
+/**
+ * Say a line as a character to one player.
+ * options: { chat, dialogue, sound }
+ */
+function speak(id, key, text, options) {
+	const v = VOICES[key] || VOICES.unknown;
+	const opts = options || {};
+
+	if (opts.chat !== false) {
+		safe(() =>
+			api.sendMessage(id, [
+				{ str: v.label, style: speakStyle(v) },
+				{ str: "  " + text, style: { color: "#e2e2e2" } },
+			])
+		);
+	}
+
+	if (opts.dialogue !== false) {
+		dialogue(id, text, [{ str: v.label, style: speakStyle(v) }], v.voice || "dark");
+	}
+
+	if (opts.sound !== false && v.sound) {
+		sound(v.sound, id, v.volume || 0.3, 0.85);
+	}
+}
+
+/** Say a line as a character to the whole lobby. */
+function speakAll(key, text, options) {
+	const v = VOICES[key] || VOICES.unknown;
+	safe(() =>
+		api.broadcastMessage([
+			{ str: v.label, style: speakStyle(v) },
+			{ str: "  " + text, style: { color: "#e2e2e2" } },
+		])
+	);
+	const ids = online();
+	for (let i = 0; i < ids.length; i++) speak(ids[i], key, text, { chat: false, sound: false });
 }
 
 function sound(name, id, vol, rate, pos) {
@@ -614,6 +718,421 @@ function scaleDamage(base) {
 }
 
 /* ---------------------------------------------------------------------------
+   CUSTOM MESH HORRORS
+   The big scares are figures built out of mesh entities (Box / BloxdBlock)
+   and moved by hand every MESH_EVERY_MS. Mesh entities share a budget, so
+   models are capped and dropped at dawn, on leave, and by /horror clear.
+   --------------------------------------------------------------------------- */
+const MESH = {};
+let meshSeq = 0;
+let lastMeshAt = 0;
+
+function meshModelCount() {
+	let n = 0;
+	for (const key in MESH) n++;
+	return n;
+}
+
+function meshPartCount() {
+	let n = 0;
+	for (const key in MESH) n += MESH[key].parts.length;
+	return n;
+}
+
+function particleBurst(pos, colour) {
+	const c = colour || [255, 40, 40, 0.9];
+	safe(() =>
+		api.playParticleEffect({
+			dir1: [-0.4, -0.4, -0.4],
+			dir2: [0.4, 0.8, 0.4],
+			pos1: [pos[0] - 0.7, pos[1], pos[2] - 0.7],
+			pos2: [pos[0] + 0.7, pos[1] + 2.4, pos[2] + 0.7],
+			texture: "soul_0",
+			minLifeTime: 0.3,
+			maxLifeTime: 1,
+			minEmitPower: 0.4,
+			maxEmitPower: 1.6,
+			minSize: 0.18,
+			maxSize: 0.5,
+			manualEmitCount: 26,
+			gravity: [0, 0.35, 0],
+			colorGradients: [
+				{ timeFraction: 0, minColor: [255, 255, 255, 0.9], maxColor: c },
+			],
+			velocityGradients: [{ timeFraction: 0, factor: 1, factor2: 1 }],
+			blendMode: 1,
+		})
+	);
+}
+
+function createPart(g, type, opts, off) {
+	if (!g) return null;
+	const id = safe(() => api.attemptCreateMeshEntity(type, opts, ""));
+	if (id === null || id === undefined) return null;
+	g.parts.push({ id: id, off: [off[0], off[1], off[2]] });
+	return id;
+}
+
+function newGroup(role, playerId, center, extra) {
+	if (!CFG.ENABLE_CUSTOM_MESHES) return null;
+	if (!center) return null;
+	if (meshModelCount() >= CFG.MAX_MESH_MODELS) return null;
+	meshSeq++;
+	const g = {
+		id: "mesh" + meshSeq,
+		role: role,
+		player: playerId,
+		center: [center[0], center[1], center[2]],
+		yaw: 0,
+		parts: [],
+		audioId: null,
+		born: NOW,
+		expireAt: NOW + 40000,
+	};
+	if (extra) {
+		for (const key in extra) g[key] = extra[key];
+	}
+	MESH[g.id] = g;
+	return g;
+}
+
+function placeParts(g, bob) {
+	if (!g) return;
+	const c = g.center;
+	const cos = Math.cos(g.yaw || 0);
+	const sin = Math.sin(g.yaw || 0);
+	for (let i = 0; i < g.parts.length; i++) {
+		const part = g.parts[i];
+		const ox = part.off[0];
+		const oy = part.off[1];
+		const oz = part.off[2];
+		const x = c[0] + ox * cos - oz * sin;
+		const z = c[2] + ox * sin + oz * cos;
+		const y = c[1] + oy + (bob ? Math.sin(NOW / 650 + oy) * 0.06 : 0);
+		safe(() => api.setPosition(part.id, x, y, z));
+	}
+}
+
+function dropGroup(g, fx) {
+	if (!g) return;
+	if (MESH[g.id]) delete MESH[g.id];
+	for (let i = 0; i < g.parts.length; i++) safe(() => api.deleteMeshEntity(g.parts[i].id));
+	if (g.audioId) safe(() => api.deleteAudioEntity(g.audioId));
+	if (fx && g.center) particleBurst([g.center[0], g.center[1] + 1.2, g.center[2]], fx);
+}
+
+function clearMeshes() {
+	for (const key in MESH) dropGroup(MESH[key]);
+}
+
+function vanishMesh(g, text) {
+	if (!g) return;
+	const st = pstate(g.player);
+	particleBurst([g.center[0], g.center[1] + 1.4, g.center[2]], [255, 30, 30, 0.9]);
+	sound(SND.fright, g.player, 0.85, 1, [g.center[0], g.center[1] + 1.4, g.center[2]]);
+	safe(() => api.shakePlayerCamera(g.player, 0.7, 1200));
+	if (st) st.sanity = clamp(st.sanity - CFG.SANITY_EVENT_COST, 0, CFG.SANITY_MAX);
+	if (text) safe(() => api.queueMiddleTextLower(g.player, text, 3200));
+}
+
+/* ---- the tall figure that only moves while you are not looking ---- */
+function buildWatcher(id, spot) {
+	const g = newGroup("watcher", id, spot, {
+		expireAt: NOW + rand(40000, 60000),
+		seenMs: 0,
+		stareLimit: 1500,
+		nextGroundAt: 0,
+	});
+	if (!g) return null;
+	const body = [9, 9, 12];
+	const limb = [6, 6, 8];
+	const eye = { width: 0.09, height: 0.07, depth: 0.06, diffuseColor: [255, 24, 24], emissiveColor: [255, 24, 24], hideDist: 96 };
+	createPart(g, "Box", { width: 0.24, height: 1.7, depth: 0.24, diffuseColor: limb, hideDist: 96 }, [-0.17, 0.85, 0]);
+	createPart(g, "Box", { width: 0.24, height: 1.7, depth: 0.24, diffuseColor: limb, hideDist: 96 }, [0.17, 0.85, 0]);
+	createPart(g, "Box", { width: 0.62, height: 1.5, depth: 0.34, diffuseColor: body, hideDist: 96 }, [0, 2.4, 0]);
+	createPart(g, "Box", { width: 0.18, height: 1.35, depth: 0.18, diffuseColor: limb, hideDist: 96 }, [-0.42, 2.45, 0]);
+	createPart(g, "Box", { width: 0.18, height: 1.35, depth: 0.18, diffuseColor: limb, hideDist: 96 }, [0.42, 2.45, 0]);
+	createPart(g, "Box", { width: 0.46, height: 0.52, depth: 0.44, diffuseColor: [14, 14, 17], hideDist: 96 }, [0, 3.35, 0]);
+	createPart(g, "Box", eye, [-0.1, 3.38, 0.23]);
+	createPart(g, "Box", eye, [0.1, 3.38, 0.23]);
+	g.yaw = Math.atan2((playerPos(id) || spot)[0] - spot[0], (playerPos(id) || spot)[2] - spot[2]);
+	placeParts(g, true);
+	return g;
+}
+
+/* ---- the floating skull that spirals in ---- */
+function buildHollow(id, spot) {
+	const g = newGroup("hollow", id, [spot[0], spot[1] + 2, spot[2]], {
+		expireAt: NOW + rand(22000, 34000),
+		angle: Math.random() * Math.PI * 2,
+		radius: 13,
+	});
+	if (!g) return null;
+	createPart(g, "BloxdBlock", { blockName: "Bone Block", size: 0.62, hideDist: 80 }, [0, 0, 0]);
+	createPart(g, "Box", { width: 0.1, height: 0.1, depth: 0.08, diffuseColor: [120, 255, 210], emissiveColor: [120, 255, 210], hideDist: 80 }, [-0.12, 0.06, 0.3]);
+	createPart(g, "Box", { width: 0.1, height: 0.1, depth: 0.08, diffuseColor: [120, 255, 210], emissiveColor: [120, 255, 210], hideDist: 80 }, [0.12, 0.06, 0.3]);
+	createPart(g, "Box", { width: 0.28, height: 0.28, depth: 0.28, diffuseColor: [70, 200, 170], emissiveColor: [40, 140, 120], hideDist: 80 }, [0, -0.42, 0]);
+	g.yaw = Math.atan2((playerPos(id) || spot)[0] - spot[0], (playerPos(id) || spot)[2] - spot[2]);
+	placeParts(g, true);
+	return g;
+}
+
+/* ---- a ring of darting black shapes ---- */
+function buildShadows(id) {
+	const pos = playerPos(id);
+	if (!pos) return null;
+	const g = newGroup("shadow", id, pos, { expireAt: NOW + rand(9000, 15000), phase: 0 });
+	if (!g) return null;
+	for (let i = 0; i < 4; i++) {
+		const a = (i * Math.PI) / 2;
+		createPart(
+			g,
+			"Box",
+			{
+				width: 0.42,
+				height: 0.42,
+				depth: 0.42,
+				diffuseColor: [5, 5, 7],
+				emissiveColor: i === 0 ? [90, 10, 10] : [0, 0, 0],
+				hideDist: 60,
+			},
+			[Math.cos(a) * 3.1, 1.1, Math.sin(a) * 3.1]
+		);
+	}
+	placeParts(g, false);
+	return g;
+}
+
+/* ---- a rune pillar that appears near the base and hums ---- */
+function buildObelisk(id, spot) {
+	const g = newGroup("obelisk", id, spot, { expireAt: NOW + 240000, yaw: rand(0, Math.PI * 2) });
+	if (!g) return null;
+	createPart(g, "Box", { width: 1.5, height: 0.28, depth: 1.5, diffuseColor: [12, 12, 14], hideDist: 90 }, [0, 0.14, 0]);
+	createPart(g, "BloxdBlock", { blockName: "Obsidian", size: [0.9, 2.9, 0.9], hideDist: 90 }, [0, 1.45, 0]);
+	createPart(g, "Box", { width: 0.12, height: 0.55, depth: 0.06, diffuseColor: [255, 30, 30], emissiveColor: [255, 30, 30], hideDist: 90 }, [0, 2.1, 0.47]);
+	createPart(g, "Box", { width: 0.12, height: 0.55, depth: 0.06, diffuseColor: [255, 30, 30], emissiveColor: [255, 30, 30], hideDist: 90 }, [0, 1.2, 0.47]);
+	g.audioId = safe(() =>
+		api.attemptCreateAudioEntity(spot[0], spot[1] + 1, spot[2], "horrorMaleDrone", 0.35, {
+			maxHearDist: 26,
+			refDistance: 4,
+		})
+	);
+	placeParts(g, false);
+	return g;
+}
+
+/* ---- the friend who sends the mods, standing in the dawn ---- */
+function spawnBenefactor(id) {
+	if (!CFG.ENABLE_CUSTOM_MESHES) return null;
+	for (const key in MESH) {
+		if (MESH[key].role === "herald" && MESH[key].player === id) return MESH[key];
+	}
+	const pos = playerPos(id);
+	if (!pos) return null;
+	let spot = null;
+	const info = safe(() => api.getPlayerFacingInfo(id));
+	if (info && info.dir) {
+		const len = Math.sqrt(info.dir[0] * info.dir[0] + info.dir[2] * info.dir[2]) || 1;
+		const x = pos[0] + (info.dir[0] / len) * 10;
+		const z = pos[2] + (info.dir[2] / len) * 10;
+		const y = findGround(x, z, pos[1]);
+		if (y !== null) spot = [x, y, z];
+	}
+	if (!spot) spot = spotAround(id, 8, 14);
+	if (!spot) return null;
+
+	const g = newGroup("herald", id, spot, {
+		expireAt: NOW + 14000,
+		yaw: Math.atan2(pos[0] - spot[0], pos[2] - spot[2]),
+	});
+	if (!g) return null;
+	createPart(g, "Box", { width: 0.78, height: 1.7, depth: 0.5, diffuseColor: [18, 17, 24], hideDist: 80 }, [0, 0.85, 0]);
+	createPart(g, "Box", { width: 0.6, height: 0.55, depth: 0.55, diffuseColor: [10, 10, 14], hideDist: 80 }, [0, 1.92, 0]);
+	createPart(g, "Box", { width: 0.34, height: 0.36, depth: 0.34, diffuseColor: [214, 206, 190], hideDist: 80 }, [0, 1.82, 0.1]);
+	createPart(g, "Box", { width: 0.07, height: 0.06, depth: 0.05, diffuseColor: [255, 200, 90], emissiveColor: [255, 200, 90], hideDist: 80 }, [-0.08, 1.86, 0.27]);
+	createPart(g, "Box", { width: 0.07, height: 0.06, depth: 0.05, diffuseColor: [255, 200, 90], emissiveColor: [255, 200, 90], hideDist: 80 }, [0.08, 1.86, 0.27]);
+	createPart(g, "Box", { width: 0.08, height: 1.9, depth: 0.08, diffuseColor: [40, 32, 24], hideDist: 80 }, [0.44, 0.95, 0.12]);
+	placeParts(g, true);
+	return g;
+}
+
+/* ---- tags that spawn the models ---- */
+function tagWatcher(id) {
+	if (!CFG.ENABLE_CUSTOM_MESHES) {
+		tagStalker(id);
+		return;
+	}
+	const spot = behindSpot(id, 22, 34);
+	if (!spot) {
+		tagSound(id);
+		return;
+	}
+	const g = buildWatcher(id, spot);
+	if (!g || g.parts.length === 0) {
+		if (g) dropGroup(g);
+		tagStalker(id);
+		return;
+	}
+	sound(SND.stalkerIdle, id, 0.5, 0.8, [spot[0], spot[1] + 2, spot[2]]);
+	safe(() => api.queueMiddleTextLower(id, "Something tall is standing in the trees.", 3800));
+}
+
+function tagHollow(id) {
+	if (!CFG.ENABLE_CUSTOM_MESHES) {
+		tagSound(id);
+		return;
+	}
+	const spot = spotAround(id, 10, 16);
+	if (!spot) {
+		tagSound(id);
+		return;
+	}
+	const g = buildHollow(id, spot);
+	if (!g || g.parts.length === 0) {
+		if (g) dropGroup(g);
+		tagSound(id);
+		return;
+	}
+	sound(SND.wraith, id, 0.6, 0.7, [spot[0], spot[1] + 2, spot[2]]);
+	safe(() => api.queueMiddleTextLower(id, "Something is floating out there.", 3400));
+}
+
+function tagShadow(id) {
+	if (!CFG.ENABLE_CUSTOM_MESHES) {
+		tagDark(id);
+		return;
+	}
+	const g = buildShadows(id);
+	if (!g || g.parts.length === 0) {
+		if (g) dropGroup(g);
+		tagDark(id);
+		return;
+	}
+	sound(SND.pulse, id, 0.5, 0.8);
+	safe(() => api.queueMiddleTextLower(id, "The dark is moving around you.", 3000));
+}
+
+function tagObelisk(id) {
+	if (!CFG.ENABLE_CUSTOM_MESHES) {
+		tagGrave(id);
+		return;
+	}
+	const spot = spotAround(id, 7, 15);
+	if (!spot) {
+		tagGrave(id);
+		return;
+	}
+	const g = buildObelisk(id, spot);
+	if (!g || g.parts.length === 0) {
+		if (g) dropGroup(g);
+		tagGrave(id);
+		return;
+	}
+	sound(SND.bell, id, 0.7, 0.8, [spot[0], spot[1] + 1, spot[2]]);
+	safe(() => api.queueMiddleTextLower(id, "A stone you did not build is standing near your base.", 4200));
+}
+
+function tickMeshes() {
+	if (NOW - lastMeshAt < CFG.MESH_EVERY_MS) return;
+	const dt = Math.min(0.4, (NOW - lastMeshAt) / 1000);
+	lastMeshAt = NOW;
+	const ids = online();
+
+	for (const key in MESH) {
+		const g = MESH[key];
+		if (!g) continue;
+		if (ids.indexOf(g.player) === -1) {
+			dropGroup(g);
+			continue;
+		}
+		if (NOW > g.expireAt) {
+			dropGroup(g, g.role === "obelisk" ? null : [190, 40, 40, 0.85]);
+			continue;
+		}
+		if (RUN.phase === "day" && g.role !== "herald") {
+			dropGroup(g);
+			continue;
+		}
+		const ppos = playerPos(g.player);
+		if (!ppos) {
+			dropGroup(g);
+			continue;
+		}
+
+		if (g.role === "watcher") {
+			const seen = isPlayerLookingAt(g.player, [g.center[0], g.center[1] + 2, g.center[2]], 0.5);
+			const d = dist3(g.center, ppos);
+			if (seen) {
+				g.seenMs = (g.seenMs || 0) + dt * 1000;
+				if (g.seenMs > (g.stareLimit || 1500)) {
+					vanishMesh(g, "It was never there.");
+					dropGroup(g, [255, 35, 35, 0.9]);
+					continue;
+				}
+			} else {
+				g.seenMs = Math.max(0, (g.seenMs || 0) - dt * 500);
+				if (d > 6) {
+					const step = (1.15 + RUN.day * 0.012) * dt;
+					g.center[0] += ((ppos[0] - g.center[0]) / (d || 1)) * step;
+					g.center[2] += ((ppos[2] - g.center[2]) / (d || 1)) * step;
+				}
+			}
+			if (d < 5.5) {
+				vanishMesh(g, "It was right behind you.");
+				dropGroup(g, [255, 35, 35, 0.9]);
+				continue;
+			}
+			if (d > 70) {
+				dropGroup(g);
+				continue;
+			}
+			g.yaw = Math.atan2(ppos[0] - g.center[0], ppos[2] - g.center[2]);
+			if (NOW > (g.nextGroundAt || 0)) {
+				g.nextGroundAt = NOW + 700;
+				const gy = findGround(g.center[0], g.center[2], g.center[1]);
+				if (gy !== null && Math.abs(gy - g.center[1]) < 3) g.center[1] = gy;
+			}
+			placeParts(g, true);
+			continue;
+		}
+
+		if (g.role === "hollow") {
+			g.angle = (g.angle || 0) + dt * 0.85;
+			g.radius = Math.max(3.6, (g.radius || 13) - dt * 0.85);
+			g.center[0] = ppos[0] + Math.cos(g.angle) * g.radius;
+			g.center[2] = ppos[2] + Math.sin(g.angle) * g.radius;
+			g.center[1] = ppos[1] + 2.1 + Math.sin(NOW / 520) * 0.45;
+			g.yaw = Math.atan2(ppos[0] - g.center[0], ppos[2] - g.center[2]);
+			if (dist3(g.center, ppos) < 4.2) {
+				vanishMesh(g, "It touched your face.");
+				dropGroup(g, [140, 255, 210, 0.9]);
+				continue;
+			}
+			placeParts(g, true);
+			continue;
+		}
+
+		if (g.role === "shadow") {
+			g.center[0] = ppos[0];
+			g.center[1] = ppos[1];
+			g.center[2] = ppos[2];
+			g.phase = (g.phase || 0) + dt * 2.6;
+			for (let i = 0; i < g.parts.length; i++) {
+				const a = g.phase + (i * Math.PI * 2) / Math.max(1, g.parts.length);
+				g.parts[i].off[0] = Math.cos(a) * 3.1;
+				g.parts[i].off[2] = Math.sin(a) * 3.1;
+				g.parts[i].off[1] = 1.1 + Math.sin(a * 2) * 0.45;
+			}
+			placeParts(g, false);
+			continue;
+		}
+
+		// obelisk and herald stand still
+		placeParts(g, g.role === "herald");
+	}
+}
+
+/* ---------------------------------------------------------------------------
    ATMOSPHERE
    --------------------------------------------------------------------------- */
 function resetAtmosphere(id) {
@@ -627,34 +1146,135 @@ function resetAtmosphere(id) {
 	opt(id, "fogOnSkybox", false);
 }
 
+/* ---------------------------------------------------------------------------
+   CUSTOM NIGHT CYCLE
+   The night is not one dark value: light, fog and tint follow a keyframed
+   curve from dusk, down to the darkest point at midnight, back up to a red
+   pre-dawn glow. Later days push the whole curve darker.
+   --------------------------------------------------------------------------- */
+const NIGHT_KEYS = [
+	{ at: 0.0, fog: "#3a2b33", far: 44, ambient: "#2b2430", sky: "#4b3a46", tint: [0.06, 0.02, 0.02, 0.04] },
+	{ at: 0.12, fog: "#1a2230", far: 34, ambient: "#1a2030", sky: "#2c3648", tint: [0.0, 0.01, 0.03, 0.06] },
+	{ at: 0.35, fog: "#0b1018", far: 26, ambient: "#0b0e16", sky: "#171e2a", tint: [0.0, 0.01, 0.03, 0.09] },
+	{ at: 0.5, fog: "#05070c", far: 20, ambient: "#05070c", sky: "#0c1018", tint: [0.0, 0.0, 0.02, 0.12] },
+	{ at: 0.65, fog: "#0b1018", far: 26, ambient: "#0b0e16", sky: "#171e2a", tint: [0.0, 0.01, 0.03, 0.09] },
+	{ at: 0.88, fog: "#202a38", far: 34, ambient: "#1a2030", sky: "#2c3648", tint: [0.0, 0.01, 0.03, 0.06] },
+	{ at: 1.0, fog: "#5c4136", far: 44, ambient: "#332a30", sky: "#51403c", tint: [0.1, 0.03, 0.01, 0.04] },
+];
+
+function hexToRgb(hex) {
+	const h = String(hex).replace("#", "");
+	return [
+		parseInt(h.substring(0, 2), 16) || 0,
+		parseInt(h.substring(2, 4), 16) || 0,
+		parseInt(h.substring(4, 6), 16) || 0,
+	];
+}
+
+function rgbToHex(rgb) {
+	const part = (n) => {
+		const v = Math.round(clamp(n, 0, 255));
+		return (v < 16 ? "0" : "") + v.toString(16);
+	};
+	return "#" + part(rgb[0]) + part(rgb[1]) + part(rgb[2]);
+}
+
+function lerp(a, b, t) {
+	return a + (b - a) * t;
+}
+
+function lerpHex(a, b, t) {
+	const ca = hexToRgb(a);
+	const cb = hexToRgb(b);
+	return rgbToHex([lerp(ca[0], cb[0], t), lerp(ca[1], cb[1], t), lerp(ca[2], cb[2], t)]);
+}
+
+function nightProgress() {
+	if (RUN.phase === "night") return clamp(RUN.phaseMs / (CFG.NIGHT_MINUTES * 60000), 0, 1);
+	if (RUN.phase === "dusk") return 0;
+	if (RUN.phase === "dawn") return 1;
+	return null;
+}
+
+function cycleAt(t) {
+	let a = NIGHT_KEYS[0];
+	let b = NIGHT_KEYS[NIGHT_KEYS.length - 1];
+	for (let i = 0; i < NIGHT_KEYS.length - 1; i++) {
+		if (t >= NIGHT_KEYS[i].at && t <= NIGHT_KEYS[i + 1].at) {
+			a = NIGHT_KEYS[i];
+			b = NIGHT_KEYS[i + 1];
+			break;
+		}
+	}
+	const span = b.at - a.at || 1;
+	const k = clamp((t - a.at) / span, 0, 1);
+	return {
+		fog: lerpHex(a.fog, b.fog, k),
+		far: lerp(a.far, b.far, k),
+		ambient: lerpHex(a.ambient, b.ambient, k),
+		sky: lerpHex(a.sky, b.sky, k),
+		tint: [
+			lerp(a.tint[0], b.tint[0], k),
+			lerp(a.tint[1], b.tint[1], k),
+			lerp(a.tint[2], b.tint[2], k),
+			lerp(a.tint[3], b.tint[3], k),
+		],
+	};
+}
+
 function applyAtmosphere(id) {
 	const st = pstate(id);
-	const night = RUN.phase === "night";
-	const dusk = RUN.phase === "dusk";
-	if (!night && !dusk) {
+	const t = nightProgress();
+	if (t === null) {
 		resetAtmosphere(id);
 		return;
 	}
 
+	const sample = cycleAt(t);
 	const fogged = st.fogUntil > NOW;
 	const darkBoost = st.darkUntil > NOW;
 	const bloody = st.bloodUntil > NOW;
 	const sanityFog = st.sanity < 25 ? 6 : 0;
 
-	let far = 52 - RUN.day * 0.34;
+	let far = sample.far - (RUN.day - 1) * 0.16;
 	if (fogged) far -= 12;
-	if (darkBoost) far -= 20;
+	if (darkBoost) far -= 16;
 	if (bloody) far -= 6;
 	far -= sanityFog;
-	far = clamp(far, 10, 56);
-	if (!night) far = Math.max(far, 34);
+	far = clamp(far, 8, 56);
+	if (RUN.phase === "dusk") far = Math.max(far, 34);
+	if (RUN.phase === "dawn") far = Math.max(far, 38);
+
+	let fogColour = sample.fog;
+	let ambient = sample.ambient;
+	let sky = sample.sky;
+	let tint = sample.tint;
+
+	// the run gets darker as the days go on
+	const decay = clamp((RUN.day - 1) * 0.003, 0, 0.28);
+	fogColour = lerpHex(fogColour, "#000000", decay);
+	ambient = lerpHex(ambient, "#000000", decay);
+	sky = lerpHex(sky, "#000000", decay);
+
+	if (bloody) {
+		fogColour = lerpHex(fogColour, "#2a080a", 0.75);
+		ambient = lerpHex(ambient, "#1a0507", 0.6);
+		sky = lerpHex(sky, "#4a1014", 0.7);
+		tint = [Math.min(0.3, tint[0] + 0.18), tint[1], tint[2], Math.min(0.24, tint[3] + 0.05)];
+	}
+	if (darkBoost) {
+		fogColour = "#04050a";
+		ambient = "#04050a";
+		sky = "#0a0a12";
+		tint = [0, 0, 0.02, 0.2];
+	}
 
 	opt(id, "fogChunkDistanceOverride", Math.round(far));
-	opt(id, "fogColourOverride", bloody ? "#22090b" : darkBoost ? "#04050a" : "#0d131c");
-	opt(id, "ambientLightColourOverride", darkBoost ? "#05060b" : "#121724");
-	opt(id, "skyLightColourOverride", bloody ? "#3a1418" : darkBoost ? "#151520" : "#232d3e");
+	opt(id, "fogColourOverride", fogColour);
+	opt(id, "ambientLightColourOverride", ambient);
+	opt(id, "skyLightColourOverride", sky);
 	opt(id, "fogOnSkybox", true);
-	opt(id, "cameraTint", bloody ? [0.22, 0.02, 0.02, 0.14] : [0, 0.02, 0.05, 0.08]);
+	opt(id, "cameraTint", tint);
 
 	if (st.sanity < 22) {
 		opt(id, "visionMinLightColour", null);
@@ -755,7 +1375,7 @@ function updateSanity(id, dtSeconds) {
 	}
 	if (st.sanity < 45 && !st.flags.w45) {
 		st.flags.w45 = true;
-		dialogue(id, "You are not doing well, are you?", "???", "soft");
+		speak(id, "unknown", "You are not doing well, are you?");
 	}
 	if (st.sanity < 25 && !st.flags.w25) {
 		st.flags.w25 = true;
@@ -831,13 +1451,14 @@ function tagFootsteps(id) {
 function tagWhisper(id) {
 	const st = pstate(id);
 	const line = pick(WHISPERS).replace("%D", String(RUN.day));
-	dialogue(id, line, "???", "dark");
+	speak(id, "unknown", line, { sound: false });
 	sound(SND.strange, id, 0.45, 0.6);
 	safe(() => api.queueMiddleTextLower(id, "\"" + line + "\"", 4000));
 	st.sanity = clamp(st.sanity - 2, 0, CFG.SANITY_MAX);
 }
 
 function tagHerald(id) {
+	spawnBenefactor(id);
 	shout("??? has joined the game.", "gray");
 	sound(SND.knock, id, 0.8, 1);
 	later(2200, () => {
@@ -1041,7 +1662,7 @@ function tagAbduction(id) {
 	safe(() => api.applyEffect(id, "Blindness", 4));
 	safe(() => api.applyEffect(id, "Slowness", 3, { inbuiltLevel: 1 }));
 	st.sanity = clamp(st.sanity - 16, 0, CFG.SANITY_MAX);
-	say(id, "You wake up somewhere else.", "#8a2f2f");
+	speak(id, "unknown", "You wake up somewhere else.", { dialogue: false });
 }
 
 function tagMirror(id) {
@@ -1061,7 +1682,7 @@ function tagMirror(id) {
 		st.sanity = clamp(st.sanity - CFG.SANITY_EVENT_COST, 0, CFG.SANITY_MAX);
 		safe(() => api.shakePlayerCamera(id, 0.6, 900));
 		sound(SND.fright, id, 0.8, 1);
-		say(id, "It had your face.", "#b0b0b0");
+		speak(id, "watcher", "It had your face.", { dialogue: false });
 		removeMob(mob);
 	});
 }
@@ -1280,6 +1901,18 @@ function fireTag(tag, id, entry) {
 		case "blood":
 			tagBlood(id);
 			break;
+		case "watcher":
+			tagWatcher(id);
+			break;
+		case "hollow":
+			tagHollow(id);
+			break;
+		case "shadow":
+			tagShadow(id);
+			break;
+		case "obelisk":
+			tagObelisk(id);
+			break;
 		case "titan":
 			if (bossAlive()) return;
 			if (CFG.BOSS_DAYS.indexOf(RUN.day) === -1) tagHunter(id);
@@ -1323,6 +1956,7 @@ function enterDawn(announce) {
 	RUN.torchesTonight = 0;
 	RUN.eventsDone = 0;
 	RUN.eventsTonight = 0;
+	clearMeshes();
 
 	const ids = online();
 	const horror = nextDayHorror(RUN.day);
@@ -1340,12 +1974,9 @@ function enterDawn(announce) {
 		if (!announce) continue;
 
 		bigTitle(id, "DAY " + RUN.day, horror ? "NEW HORROR: " + horror[1] : "");
-		dialogue(
-			id,
-			horror ? horror[3] : "You survived another one.",
-			"???",
-			"dark"
-		);
+		speak(id, horror ? "benefactor" : "unknown", horror ? horror[3] : "You survived another one.", {
+			chat: false,
+		});
 		safe(() => api.sendFlyingMiddleMessage(id, "DAY " + RUN.day, 100, 2600));
 		sound(SND.bell, id, 0.5, 0.9);
 	}
@@ -1362,6 +1993,7 @@ function enterDawn(announce) {
 			const live = online();
 			for (let i = 0; i < live.length; i++) opt(live[i], "dialogue", null);
 		});
+		if (ids.length > 0) spawnBenefactor(ids[0]);
 	}
 	saveRun();
 }
@@ -1683,6 +2315,7 @@ tick = function (ms) {
 
 	runSched();
 	tickPlayers(dt);
+	tickMeshes();
 	tickMobs();
 	tickCycle(dt);
 
@@ -1697,7 +2330,7 @@ function welcome(id) {
 	st.sanity = CFG.SANITY_MAX;
 	applyAtmosphere(id);
 	updateHud(id);
-	say(id, "SWORD4000 HORROR \u2014 100 DAYS", "#a83232");
+	say(id, "BLOXDVOID_YT HORROR \u2014 100 DAYS", "#a83232");
 	say(id, "Day " + RUN.day + " / 100. Horrors active: " + activeHorrors().length + ".", "gray");
 	if (RUN.phase === "night") {
 		say(id, "It is night. It is already night.", "#a83232");
@@ -1723,6 +2356,9 @@ onPlayerLeave = function (playerId) {
 	delete PLAYERS[playerId];
 	for (const key in TRACK) {
 		if (TRACK[key].player === playerId) removeMob(TRACK[key].id);
+	}
+	for (const key in MESH) {
+		if (MESH[key].player === playerId) dropGroup(MESH[key]);
 	}
 };
 
@@ -1757,7 +2393,8 @@ playerCommand = function (playerId, command) {
 		say(playerId, "/horror start | stop | pause | resume | skip | night", "gray");
 		say(playerId, "/horror mods | mod <day> | day (info)", "gray");
 		if (admin) {
-			say(playerId, "/horror day <1-100> | boss | clear | sanity <n> | reset", "#8fd0ff");
+			say(playerId, "/horror day <1-100> | boss | clear | meshes | sanity <n> | reset", "#8fd0ff");
+			say(playerId, "/horror say <voice> <text> \u2014 voices: benefactor, unknown, watcher, crone, system", "#8fd0ff");
 			say(playerId, "/horror length <dayMin> <nightMin> | test <tag>", "#8fd0ff");
 		}
 		return false;
@@ -1845,7 +2482,32 @@ playerCommand = function (playerId, command) {
 
 	if (sub === "clear") {
 		clearHorrorMobs();
-		say(playerId, "All horror mobs despawned.", "#8fd0ff");
+		clearMeshes();
+		say(playerId, "All horror mobs and mesh models despawned.", "#8fd0ff");
+		return false;
+	}
+
+	if (sub === "meshes") {
+		say(playerId, "Mesh models: " + meshModelCount() + " (" + meshPartCount() + " parts)", "#8fd0ff");
+		for (const key in MESH) {
+			say(playerId, MESH[key].role + " \u2014 " + MESH[key].parts.length + " parts", "gray");
+		}
+		return false;
+	}
+
+	if (sub === "say") {
+		const first = String(args[2] || "").toLowerCase();
+		let key = "benefactor";
+		let text = args.slice(2).join(" ");
+		if (VOICES[first]) {
+			key = first;
+			text = args.slice(3).join(" ");
+		}
+		if (!text) {
+			say(playerId, "Usage: /horror say <benefactor|unknown|watcher|crone|system> <text>", "gray");
+			return false;
+		}
+		speakAll(key, text);
 		return false;
 	}
 
@@ -2000,6 +2662,7 @@ doPeriodicSave = function () {
 onClose = function (serverIsShuttingDown) {
 	saveRun();
 	clearHorrorMobs();
+	clearMeshes();
 };
 
 /* ---------------------------------------------------------------------------
@@ -2019,7 +2682,7 @@ function boot() {
 		}
 		shout("Horror run restored \u2014 day " + RUN.day + ", " + phaseName() + ".", "gray");
 	}
-	safe(() => api.log("Sword4000 Horror 100 loaded. Day " + RUN.day + "."));
+	safe(() => api.log("Bloxdvoid_YT Horror 100 loaded. Day " + RUN.day + "."));
 }
 
 boot();
