@@ -231,7 +231,7 @@ const METEOR_EXTRAS = [
 ];
 const TUTORIAL_KEY = "vb_tutorial_v1";
 const TUTORIAL_STEPS = [
-{ name: "WELCOME", colour: "#55aaff", lines: ["Welcome to AEVORA SMP - a short walkthrough runs while you settle in.", "Void Shards are the only currency: kills, mobs and playtime pay you.", "Check yourself with /stats, your quests with /quests and every command with /help."] },
+{ name: "WELCOME", colour: "#55aaff", lines: ["Welcome to AEVORA - a short walkthrough runs while you settle in.", "Void Shards are the only currency: kills, mobs and playtime pay you.", "Check yourself with /stats, your quests with /quests and every command with /help."] },
 { name: "GEAR", colour: "#55ff55", lines: ["/weapons shows every blade and its D, S and C, then /weapon buy <id>.", "/armour sells four piece sets - wear all four and the set ability switches on.", "Gear wears down as it saves you, so keep shards coming in."] },
 { name: "QUESTS", colour: "#ffd75e", lines: ["Four givers wait in the lobby: xVexx, TECMAN_, Conceptual and PolyDuck.", "Right-click one, or type /quest fishing to take their job.", "Quests are the fastest XP in the game and they pay shards as well."] },
 { name: "PRESTIGE", colour: "#b48cff", lines: ["Reach level " + CFG.LEVEL_CAP + ", then right-click BloxdSeno at 603.5 -99943 -110.5.", "Each prestige grants one shard: 10 shards per stat, +50% each.", "40 prestiges fills every stat, and the level cap lifts after that."] },
@@ -4304,10 +4304,10 @@ say(playerId, "Prestige " + p.count + "/" + CFG.PRESTIGE_MAX + "  |  cap " + (p.
 }
 const DISCORD_LINK = "https://discord.gg/crWR7Xx6bZ";
 const FANCY_TITLE = true;
-const GAME_TITLE = "AEVORA SMP";
+const GAME_TITLE = "AEVORA";
 const FANCY_NAME = "𝔸𝔼𝕍𝕆ℝ𝔸";
 function gameTitle() {
-return FANCY_TITLE ? FANCY_NAME + " 𝕊𝕄ℙ" : GAME_TITLE;
+return FANCY_TITLE ? FANCY_NAME : GAME_TITLE;
 }
 function yawTo(x, z, targetX, targetZ) {
 const yaw = Math.atan2(-(targetX - x), targetZ - z) * 180 / Math.PI;
@@ -4943,7 +4943,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-AEVORA-2";
+const BUILD = "VB-AEVORA-3";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
@@ -5062,7 +5062,7 @@ cmdPanel(playerId);
 return false;
 }
 if (cmd === "discord" || cmd === "dc") {
-say(playerId, "AEVORA SMP Discord:", "#55aaff");
+say(playerId, "AEVORA Discord:", "#55aaff");
 say(playerId, DISCORD_LINK, "#8fd0ff");
 say(playerId, "Chat links are not clickable - copy it into your browser.", "#5a5a5a");
 return false;
