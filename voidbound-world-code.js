@@ -22,7 +22,7 @@ ZONE_HALF: 50,
 ZONE_Y: 120,
 PROTECT_RADIUS: 1000,
 PROTECT_Y: 1000,
-PROTECT_ZONES: [[651.5, -99943, -98.5], [637, -99932, -396], [9089.5, 9989, 9768.59]],
+PROTECT_ZONES: [[651.5, -99943, -98.5], [637, -99932, -396], [9089.5, 9989, 9768.59], [10000, -9999, 10000]],
 ARENA_GRACE_EFFECT: "Damage Reduction",
 GIVER_TALK_RANGE: 5,
 PRESTIGE_POS: [603.5, -99943, -110.5],
@@ -1892,7 +1892,7 @@ if (isOwner(playerId)) say(playerId, "  /meteor spawn - drop a meteor now", "#ff
 say(playerId, "The world border sits " + fmtNum(CFG.WORLD_BORDER) + " blocks out on each side.", "#8a8a8a");
 say(playerId, "  Light blue portal - PVP arena with a 5s grace period", "#ffffff");
 say(playerId, "  Orange portal - warps you to 637, -99932, -396", "#ffffff");
-say(playerId, "Only admins and Founders can place or break within 1000 blocks of the NPC yard, the orange portal and the arena.", "#8a8a8a");
+say(playerId, "Only admins and Founders can place or break within 1000 blocks of spawn, the NPC yard, the orange portal and the arena.", "#8a8a8a");
 say(playerId, "Only Founders can build within 100 blocks of the black portal. No hitting in the lobby or at the black portal.", "#8a8a8a");
 say(playerId, "QUESTS", "#55aaff");
 say(playerId, "  /quests - your quests and XP", "#ffffff");
@@ -5047,7 +5047,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-AEVORA-10";
+const BUILD = "VB-AEVORA-11";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
