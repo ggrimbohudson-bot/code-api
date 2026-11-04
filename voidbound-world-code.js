@@ -20,6 +20,9 @@ ARENA_DEST: [9063.5, 9991, 9744.5],
 ARENA_GRACE_MS: 5000,
 ZONE_HALF: 50,
 ZONE_Y: 120,
+PROTECT_RADIUS: 1000,
+PROTECT_Y: 1000,
+PROTECT_ZONES: [[651.5, -99943, -98.5], [637, -99932, -396], [9063.5, 9991, 9744.5]],
 ARENA_GRACE_EFFECT: "Damage Reduction",
 GIVER_TALK_RANGE: 5,
 PRESTIGE_POS: [603.5, -99943, -110.5],
@@ -1889,8 +1892,8 @@ if (isOwner(playerId)) say(playerId, "  /meteor spawn - drop a meteor now", "#ff
 say(playerId, "The world border sits " + fmtNum(CFG.WORLD_BORDER) + " blocks out on each side.", "#8a8a8a");
 say(playerId, "  Light blue portal - PVP arena with a 5s grace period", "#ffffff");
 say(playerId, "  Orange portal - warps you to 637, -99932, -396", "#ffffff");
-say(playerId, "Only the owner can break blocks within 100x100 of the arena or the black portal.", "#8a8a8a");
-say(playerId, "No hitting in the lobby or at the black portal.", "#8a8a8a");
+say(playerId, "Only admins and Founders can place or break within 1000 blocks of the NPC yard, the orange portal and the arena.", "#8a8a8a");
+say(playerId, "Only Founders can build within 100 blocks of the black portal. No hitting in the lobby or at the black portal.", "#8a8a8a");
 say(playerId, "QUESTS", "#55aaff");
 say(playerId, "  /quests - your quests and XP", "#ffffff");
 say(playerId, "  /quest <fishing|hunting|mining|lumber> - talk to a giver", "#ffffff");
@@ -2481,6 +2484,23 @@ sfx(playerId, "exp_levelup", 1, 1);
 say(playerId, "The dice land on " + fmtNum(given) + " " + item + "!", rare ? "#55ff55" : "#ffd75e");
 say(playerId, "Free roll spent - the next one is in 24 hours. Rolls so far: " + fmtNum(d.gamble.rolls) + ".", "#8a8a8a");
 return true;
+}
+function gamblerWithin(playerId, dist) {
+let pos = null;
+try { pos = api.getPosition(playerId); } catch (e) { return false; }
+if (!pos) return false;
+if (!isFinite(pos[0]) || !isFinite(pos[1]) || !isFinite(pos[2])) return false;
+const dx = pos[0] - GAMBLER_POS[0];
+const dy = pos[1] - GAMBLER_POS[1];
+const dz = pos[2] - GAMBLER_POS[2];
+return Math.sqrt(dx * dx + dy * dy + dz * dz) <= (dist || 6);
+}
+function gamblePoke(playerId) {
+const rt = RT[playerId] || (RT[playerId] = {});
+const now = Date.now();
+if (rt.gamblePokeAt && now - rt.gamblePokeAt < 1200) return;
+rt.gamblePokeAt = now;
+gambleRoll(playerId);
 }
 function applyGamblerNameTag() {
 if (!GAMBLER_NPC) return;
@@ -3138,7 +3158,15 @@ function zoneRect(centre) {
 return [[centre[0] - CFG.ZONE_HALF, centre[1] - CFG.ZONE_Y, centre[2] - CFG.ZONE_HALF], [centre[0] + CFG.ZONE_HALF, centre[1] + CFG.ZONE_Y, centre[2] + CFG.ZONE_HALF]];
 }
 function buildZoneCentres() {
-return [CFG.ARENA_DEST, CFG.BLACK_PORTAL_DEST];
+return [CFG.BLACK_PORTAL_DEST];
+}
+function protectZoneCentres() {
+return CFG.PROTECT_ZONES;
+}
+function protectRect(centre) {
+const r = CFG.PROTECT_RADIUS;
+const h = CFG.PROTECT_Y;
+return [[centre[0] - r, centre[1] - h, centre[2] - r], [centre[0] + r, centre[1] + h, centre[2] + r]];
 }
 function safeZoneCentres() {
 return [LOBBY_SPAWN, CFG.BLACK_PORTAL_DEST];
@@ -3165,17 +3193,41 @@ return inAnyZone(playerId, buildZoneCentres());
 }
 function applyZoneRules(playerId) {
 if (!playerId) return;
-const owner = rankLevel(playerId) >= RANKS.owner.level;
+const level = rankLevel(playerId);
 const centres = buildZoneCentres();
 for (let i = 0; i < centres.length; i++) {
-const pts = zoneRect(centres[i]);
+applyZoneRect(playerId, zoneRect(centres[i]), level >= RANKS.owner.level);
+}
+const zones = protectZoneCentres();
+for (let i = 0; i < zones.length; i++) {
+applyZoneRect(playerId, protectRect(zones[i]), level >= RANKS.admin.level);
+}
+}
+function applyZoneRect(playerId, pts, allowed) {
 try {
-if (owner) api.resetCanChangeBlockRect(playerId, pts[0], pts[1]);
+if (allowed) api.resetCanChangeBlockRect(playerId, pts[0], pts[1]);
 else api.setCantChangeBlockRect(playerId, pts[0], pts[1]);
 } catch (e) {
 noteError("zone protect", e);
 }
 }
+function inProtectZone(playerId) {
+let pos = null;
+try { pos = api.getPosition(playerId); } catch (e) { return false; }
+if (!pos) return false;
+const r = CFG.PROTECT_RADIUS;
+const h = CFG.PROTECT_Y;
+const zones = protectZoneCentres();
+for (let i = 0; i < zones.length; i++) {
+const c = zones[i];
+if (Math.abs(pos[0] - c[0]) <= r && Math.abs(pos[1] - c[1]) <= h && Math.abs(pos[2] - c[2]) <= r) return true;
+}
+return false;
+}
+function zoneLockText(playerId) {
+if (inProtectZone(playerId)) return rankLevel(playerId) >= RANKS.admin.level ? "protected zone - staff can build" : "protected zone - locked";
+if (inBuildZone(playerId)) return rankLevel(playerId) >= RANKS.owner.level ? "founder zone - you can build" : "founder zone - locked";
+return "open";
 }
 onPlayerDamagingOtherPlayer = function (attackingPlayer, damagedPlayer) {
 const now = Date.now();
@@ -3299,7 +3351,7 @@ const dest = CFG.ARENA_DEST;
 say(playerId, "  light blue portal -> arena " + dest[0] + ", " + dest[1] + ", " + dest[2] + "  " + Math.round(CFG.ARENA_GRACE_MS / 1000) + "s grace", "#55ff55");
 }
 say(playerId, "  arena grace: " + (rt.arenaGraceUntil && rt.arenaGraceUntil > Date.now() ? Math.ceil((rt.arenaGraceUntil - Date.now()) / 1000) + "s" : "none"), "#8a8a8a");
-say(playerId, "  build lock here: " + (inBuildZone(playerId) ? (rankLevel(playerId) >= RANKS.owner.level ? "owner zone - you can build" : "owner zone - locked") : "open"), "#8a8a8a");
+say(playerId, "  build lock here: " + zoneLockText(playerId), "#8a8a8a");
 say(playerId, "  ground here: " + (surface === null ? "none found" : surface), "#8a8a8a");
 say(playerId, "  apis: getBlock " + (typeof api.getBlock) + ", solidity " + (typeof api.getBlockSolidity), "#8a8a8a");
 say(playerId, "  cooldown: " + (rt.portalUntil && rt.portalUntil > Date.now() ? Math.ceil((rt.portalUntil - Date.now()) / 1000) + "s" : "ready"), "#8a8a8a");
@@ -4920,7 +4972,7 @@ openPrestigeMenu(playerId);
 return;
 }
 if (GAMBLER_NPC && targetEId === GAMBLER_NPC) {
-gambleRoll(playerId);
+gamblePoke(playerId);
 return;
 }
 for (const key in QUEST_NPCS) {
@@ -4931,7 +4983,11 @@ return;
 }
 }
 const near = giverNear(playerId);
-if (near) questTalkThrottled(playerId, near);
+if (near) {
+questTalkThrottled(playerId, near);
+return;
+}
+if (gamblerWithin(playerId, 6)) gamblePoke(playerId);
 };
 doPeriodicSave = function () {
 saveAll();
@@ -4986,7 +5042,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-AEVORA-6";
+const BUILD = "VB-AEVORA-7";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
