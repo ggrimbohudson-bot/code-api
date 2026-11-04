@@ -105,6 +105,7 @@ const CFG = {
 	SAVE_EVERY_MS: 30000,
 	MOB_EVERY_MS: 200,
 	SANITY_EVERY_MS: 250,
+	DREAD_EVERY_MS: 900,
 
 	ADMIN_NAMES: ["xvexx", "bloxdvoid_yt"],
 
@@ -265,6 +266,9 @@ const SND = {
 	growl: "dogGrowl1",
 	step: "step_gravel1",
 	stepRpg: "rpgFootstep00",
+	heart: "lowDrum1",
+	breath: "wraithGrunt2",
+	creak: "rpgCreak1",
 };
 
 const WHISPERS = [
@@ -278,6 +282,17 @@ const WHISPERS = [
 	"You left something behind.",
 	"It is behind you. It is always behind you.",
 	"One hundred days. I can wait.",
+];
+
+const DREAD_LINES = [
+	"You are breathing too fast.",
+	"It is standing in the doorway.",
+	"That was not your footsteps.",
+	"Do not look at the treeline.",
+	"It knows what you are holding.",
+	"Your name is easier to say than you think.",
+	"I am closer than the sound.",
+	"Stop looking at the chat.",
 ];
 
 /* ---------------------------------------------------------------------------
@@ -296,6 +311,10 @@ const RUN = {
 	startedAt: 0,
 	lastSaveAt: 0,
 	lastCleanAt: 0,
+	runMs: 0,
+	finished: false,
+	finishedAt: 0,
+	jumpscares: 0,
 };
 
 let NOW = 0;
@@ -311,6 +330,15 @@ function pstate(id) {
 			lastHud: 0,
 			lastAtmos: 0,
 			lastSanity: 0,
+			dread: 0,
+			dreadAt: 0,
+			heartAt: 0,
+			breathAt: 0,
+			knockAt: 0,
+			flickerAt: 0,
+			blackoutUntil: 0,
+			wasBlackout: false,
+			jumpAt: 0,
 			fogUntil: 0,
 			darkUntil: 0,
 			bloodUntil: 0,
@@ -1154,13 +1182,13 @@ function resetAtmosphere(id) {
    pre-dawn glow. Later days push the whole curve darker.
    --------------------------------------------------------------------------- */
 const NIGHT_KEYS = [
-	{ at: 0.0, fog: "#3a2b33", far: 44, ambient: "#2b2430", sky: "#4b3a46", tint: [0.06, 0.02, 0.02, 0.04] },
-	{ at: 0.12, fog: "#1a2230", far: 34, ambient: "#1a2030", sky: "#2c3648", tint: [0.0, 0.01, 0.03, 0.06] },
-	{ at: 0.35, fog: "#0b1018", far: 26, ambient: "#0b0e16", sky: "#171e2a", tint: [0.0, 0.01, 0.03, 0.09] },
-	{ at: 0.5, fog: "#05070c", far: 20, ambient: "#05070c", sky: "#0c1018", tint: [0.0, 0.0, 0.02, 0.12] },
-	{ at: 0.65, fog: "#0b1018", far: 26, ambient: "#0b0e16", sky: "#171e2a", tint: [0.0, 0.01, 0.03, 0.09] },
-	{ at: 0.88, fog: "#202a38", far: 34, ambient: "#1a2030", sky: "#2c3648", tint: [0.0, 0.01, 0.03, 0.06] },
-	{ at: 1.0, fog: "#5c4136", far: 44, ambient: "#332a30", sky: "#51403c", tint: [0.1, 0.03, 0.01, 0.04] },
+	{ at: 0.0, fog: "#33252d", far: 40, ambient: "#241d28", sky: "#453340", tint: [0.08, 0.02, 0.02, 0.05] },
+	{ at: 0.12, fog: "#141a26", far: 30, ambient: "#131826", sky: "#232c3c", tint: [0.0, 0.01, 0.03, 0.08] },
+	{ at: 0.35, fog: "#070b12", far: 22, ambient: "#080a12", sky: "#111722", tint: [0.0, 0.01, 0.03, 0.12] },
+	{ at: 0.5, fog: "#030406", far: 17, ambient: "#03040a", sky: "#080b14", tint: [0.0, 0.0, 0.02, 0.18] },
+	{ at: 0.65, fog: "#070b12", far: 22, ambient: "#080a12", sky: "#111722", tint: [0.0, 0.01, 0.03, 0.12] },
+	{ at: 0.88, fog: "#1a2230", far: 30, ambient: "#141a26", sky: "#232c3c", tint: [0.0, 0.01, 0.03, 0.08] },
+	{ at: 1.0, fog: "#4a2f28", far: 36, ambient: "#2b2228", sky: "#463432", tint: [0.12, 0.03, 0.01, 0.05] },
 ];
 
 function hexToRgb(hex) {
@@ -1224,6 +1252,7 @@ function cycleAt(t) {
 
 function applyAtmosphere(id) {
 	const st = pstate(id);
+	if (RUN.finished) return;
 	const t = nightProgress();
 	if (t === null) {
 		resetAtmosphere(id);
@@ -1313,14 +1342,17 @@ function updateHud(id) {
 	if (NOW - st.lastHud < CFG.HUD_EVERY_MS) return;
 	st.lastHud = NOW;
 
-	opt(id, "RightInfoText", hudText(id));
-	opt(
-		id,
-		"middleTextTop",
-		"DAY " + RUN.day + "  \u2022  " + phaseName() + "  \u2022  " +
-			fmtTime(Math.ceil((phaseLength(RUN.phase) - RUN.phaseMs) / 1000))
-	);
-	safe(() => api.progressBarUpdate(id, clamp01(st.sanity / CFG.SANITY_MAX), 400));
+	const finished = RUN.finished && !RUN.running;
+	opt(id, "RightInfoText", finished ? finishStats(id) : hudText(id));
+	if (!finished) {
+		opt(
+			id,
+			"middleTextTop",
+			"DAY " + RUN.day + "  \u2022  " + phaseName() + "  \u2022  " +
+				fmtTime(Math.ceil((phaseLength(RUN.phase) - RUN.phaseMs) / 1000))
+		);
+	}
+	safe(() => api.progressBarUpdate(id, finished ? 1 : clamp01(st.sanity / CFG.SANITY_MAX), 400));
 
 	if (st.dialogUntil && NOW > st.dialogUntil) {
 		st.dialogUntil = 0;
@@ -1355,12 +1387,16 @@ function updateSanity(id, dtSeconds) {
 	const night = RUN.phase === "night";
 	let delta = 0;
 
-	if (!RUN.running) return;
+	if (!RUN.running) {
+		st.dread = 0;
+		return;
+	}
 
+	const near = nearestHorrorDistance(id);
 	if (night) {
 		delta -= CFG.SANITY_NIGHT_DRAIN;
 		if (isUnderground(id)) delta -= CFG.SANITY_UNDERGROUND_DRAIN;
-		if (nearestHorrorDistance(id) < 26) delta -= CFG.SANITY_NEAR_DRAIN;
+		if (near < 26) delta -= CFG.SANITY_NEAR_DRAIN;
 		if (st.darkUntil > NOW) delta -= CFG.SANITY_DARK_DRAIN;
 	} else if (RUN.phase === "dawn") {
 		delta += CFG.SANITY_DAWN_REGEN;
@@ -1371,6 +1407,17 @@ function updateSanity(id, dtSeconds) {
 	}
 
 	st.sanity = clamp(st.sanity + delta * dtSeconds, 0, CFG.SANITY_MAX);
+
+	// how wrong the world feels: drives the heartbeat, the light kills and the
+	// close-range scares
+	st.dread = clamp(
+		(1 - st.sanity / CFG.SANITY_MAX) * 0.55 +
+			clamp(1 - near / 40, 0, 1) * 0.3 +
+			(night ? 0.3 : RUN.phase === "dusk" ? 0.12 : 0) +
+			RUN.day / 1000,
+		0,
+		1
+	);
 
 	// fear beats
 	if (st.sanity < 70 && !st.flags.w70) {
@@ -1409,6 +1456,99 @@ function updateSanity(id, dtSeconds) {
 	// reset threshold flags at dawn
 	if (RUN.phase === "dawn" && st.flags.w70 && st.sanity > 85) {
 		st.flags = {};
+	}
+}
+
+/* ---------------------------------------------------------------------------
+   DREAD
+   The score: a heartbeat that speeds up as the night gets worse, breathing
+   behind you, the lights dying for a quarter of a second, knocks with nothing
+   on the other side, and a stalker close enough to touch. None of it is fair.
+   --------------------------------------------------------------------------- */
+function dreadFx(id) {
+	if (!RUN.running) return;
+	const st = pstate(id);
+	const pos = playerPos(id);
+	if (RUN.phase !== "night" && RUN.phase !== "dusk") return;
+	if (st.dread < 0.28) return;
+
+	if (NOW > st.heartAt) {
+		st.heartAt = NOW + lerp(9000, 1800, st.dread) * rand(0.85, 1.2);
+		sound(SND.heart, id, 0.15 + st.dread * 0.5, rand(0.9, 1.05), pos || undefined);
+	}
+
+	if (st.dread > 0.45 && NOW > st.breathAt) {
+		st.breathAt = NOW + rand(11000, 19000);
+		speak(id, "unknown", pick(DREAD_LINES), { chat: false, sound: false });
+		sound(SND.breath, id, 0.18, rand(0.55, 0.75));
+	}
+
+	if (st.dread > 0.4 && NOW > st.knockAt) {
+		st.knockAt = NOW + rand(20000, 40000);
+		const spot = behindSpot(id, 5, 16);
+		if (spot) {
+			sound(SND.knock, id, 0.7, rand(0.9, 1.05), spot);
+			later(600, () => sound(SND.knock, id, 0.6, 1.1, spot));
+			later(1250, () => sound(SND.metalKnock, id, 0.65, 0.9, spot));
+		}
+	}
+
+	if (st.dread > 0.58 && NOW > st.flickerAt) {
+		st.flickerAt = NOW + rand(6500, 13000);
+		st.blackoutUntil = NOW + rand(90, 240);
+		sound(SND.creak, id, 0.25, rand(0.7, 1.2), pos || undefined);
+	}
+
+	if (st.dread > 0.7 && RUN.phase === "night" && RUN.jumpscares < 2 && NOW > st.jumpAt) {
+		st.jumpAt = NOW + rand(45000, 80000);
+		ambientJumpscare(id);
+	}
+}
+
+function ambientJumpscare(id) {
+	if (liveMobCount() >= CFG.MAX_MOBS) return;
+	const spot = behindSpot(id, 5, 9);
+	if (!spot) return;
+	const mob = spawnMob("Stalker", spot, "", "void");
+	if (!mob) return;
+	setMobHealth(mob, scaleHealth(30));
+	mobSetting(mob, "baseRunningSpeed", 0);
+	mobAi(mob, "watching", { targetId: id });
+	trackMob(mob, {
+		role: "stalker",
+		player: id,
+		born: NOW,
+		expireAt: NOW + rand(9000, 14000),
+		watchedAt: NOW,
+		alive: true,
+	});
+	RUN.jumpscares += 1;
+	sound(SND.stalkerIdle, id, 0.85, 0.8, spot);
+	safe(() => api.shakePlayerCamera(id, 0.75, 900));
+	safe(() => api.queueMiddleTextLower(id, "Do not turn around.", 2600));
+}
+
+function tickDreadFx() {
+	const ids = online();
+	for (let i = 0; i < ids.length; i++) {
+		const st = pstate(ids[i]);
+		if (RUN.finished) continue;
+		if (!RUN.running) {
+			if (st.wasBlackout) {
+				st.wasBlackout = false;
+				applyAtmosphere(ids[i]);
+			}
+			continue;
+		}
+		if (st.blackoutUntil > NOW) {
+			st.wasBlackout = true;
+			opt(ids[i], "visionMinLightColour", "#000000");
+			opt(ids[i], "cameraTint", [0, 0, 0, 0.78]);
+			opt(ids[i], "cameraRoll", Math.sin(NOW / 90) * 0.05);
+		} else if (st.wasBlackout) {
+			st.wasBlackout = false;
+			applyAtmosphere(ids[i]);
+		}
 	}
 }
 
@@ -1970,6 +2110,8 @@ function enterDawn(announce) {
 		st.darkUntil = 0;
 		st.bloodUntil = 0;
 		st.sanity = clamp(st.sanity + 6, 0, CFG.SANITY_MAX);
+		clearFinishScreen(id);
+		opt(id, "showProgressBar", true);
 		resetAtmosphere(id);
 		opt(id, "music", null);
 		opt(id, "musicVolumeLevel", 0.6);
@@ -2025,7 +2167,8 @@ function enterNight() {
 	RUN.phaseMs = 0;
 	RUN.torchesTonight = 0;
 	RUN.eventsDone = 0;
-	RUN.eventsTonight = Math.min(14, 2 + Math.floor(RUN.day / 6));
+	RUN.jumpscares = 0;
+	RUN.eventsTonight = Math.min(14, 2 + Math.floor(RUN.day / 6) + (RUN.day >= CFG.MAX_DAY ? 2 : 0));
 
 	const ids = online();
 	const horror = nextDayHorror(RUN.day);
@@ -2034,17 +2177,45 @@ function enterNight() {
 		const id = ids[i];
 		applyAtmosphere(id);
 		opt(id, "music", "Adigold - Dreamless Sleep");
+		opt(id, "musicVolumeLevel", 0.12);
 		bigTitle(id, "NIGHT " + RUN.day, horror ? horror[1] : "");
 		sound(SND.riser, id, 0.7, 0.7);
 		safe(() => api.shakePlayerCamera(id, 0.4, 2000));
 	}
+
+	// the music drops away first. The silence is the warning.
+	later(9000, () => {
+		const live = online();
+		for (let i = 0; i < live.length; i++) opt(live[i], "musicVolumeLevel", 0.6);
+	});
 	shout("NIGHT " + RUN.day + " HAS FALLEN", "#a83232");
+
+	if (RUN.day === 1) {
+		later(2600, () => speakAll("benefactor", "Day one. I am already inside the fog."));
+		later(12000, () => {
+			if (!RUN.running || RUN.phase !== "night") return;
+			const live = online();
+			if (live.length === 0) return;
+			tagWhisper(pick(live));
+			tagFootsteps(live[0]);
+		});
+	}
+	if (RUN.day >= CFG.MAX_DAY) {
+		later(4000, () => speakAll("benefactor", "One hundred nights. I want to watch this one."));
+		later(14000, () => {
+			if (!RUN.running || RUN.phase !== "night") return;
+			const live = online();
+			if (live.length === 0) return;
+			tagWatcher(pick(live));
+		});
+	}
 
 	// the new horror always shows itself first
 	if (horror) {
 		later(7000, () => {
+			if (!RUN.running || RUN.phase !== "night") return;
 			const live = online();
-			if (live.length === 0 || RUN.phase !== "night") return;
+			if (live.length === 0) return;
 			fireTag(horror[2][0], pick(live), horror);
 		});
 	}
@@ -2052,7 +2223,7 @@ function enterNight() {
 	// bosses arrive at midnight-ish
 	if (CFG.BOSS_DAYS.indexOf(RUN.day) !== -1) {
 		later(Math.round(CFG.NIGHT_MINUTES * 60000 * 0.45), () => {
-			if (RUN.phase !== "night") return;
+			if (!RUN.running || RUN.phase !== "night") return;
 			const live = online();
 			if (live.length === 0) return;
 			tagTitan(pick(live), horror);
@@ -2085,22 +2256,123 @@ function advancePhase() {
 	}
 	// night survived
 	if (RUN.day >= CFG.MAX_DAY) {
-		RUN.running = false;
-		shout("DAY 100 SURVIVED. The benefactor is out of ideas.", "yellow");
-		const ids = online();
-		for (let i = 0; i < ids.length; i++) {
-			bigTitle(ids[i], "YOU SURVIVED", "100 DAYS");
-			sound("levelup", ids[i], 1, 1);
-			safe(() => api.giveItem(ids[i], "Diamond", 10));
-			const pb = safe(() => api.getPlayerDbValue(ids[i], CFG.DB_BEST));
-			const best = Number(pb) || 0;
-			if (RUN.day > best) safe(() => api.setPlayerDbValue(ids[i], CFG.DB_BEST, RUN.day));
-		}
-		saveRun();
+		finishRun();
 		return;
 	}
 	RUN.day += 1;
 	enterDawn(true);
+}
+
+/* ---------------------------------------------------------------------------
+   FINISH SCREEN
+   Bloxd has no full-screen image option, so the ending is composed from every
+   layer it does expose: the three middle-text bands, the right info panel, the
+   dialogue panel, a full progress bar, fog, tint and a closing theme.
+   --------------------------------------------------------------------------- */
+function fmtDuration(ms) {
+	const total = Math.max(0, Math.round(ms / 1000));
+	const h = Math.floor(total / 3600);
+	const m = Math.floor((total % 3600) / 60);
+	const s = total % 60;
+	if (h > 0) return h + "h " + (m < 10 ? "0" : "") + m + "m";
+	return m + "m " + (s < 10 ? "0" : "") + s + "s";
+}
+
+function finishStats(id) {
+	const st = pstate(id);
+	const best = Math.max(CFG.MAX_DAY, Number(safe(() => api.getPlayerDbValue(id, CFG.DB_BEST))) || 0);
+	return [
+		"RUN COMPLETE",
+		"",
+		"DAY " + RUN.day + " / 100",
+		"DEATHS  " + RUN.deaths,
+		"TIME  " + fmtDuration(RUN.runMs),
+		"SANITY  " + Math.round(st.sanity) + "%",
+		"HORRORS  " + activeHorrors().length,
+		"BEST  DAY " + best,
+	].join("\n");
+}
+
+function clearFinishScreen(id) {
+	opt(id, "middleTextUpper", "");
+	opt(id, "middleTextLower", "");
+	opt(id, "middleTextTop", "");
+	opt(id, "RightInfoText", "");
+	opt(id, "dialogue", null);
+}
+
+function showFinishScreen(id, animate) {
+	const st = pstate(id);
+	const pos = playerPos(id);
+	const voice = VOICES.benefactor;
+
+	if (animate) {
+		bigTitle(id, "YOU SURVIVED", "100 DAYS");
+		sound("levelup", id, 1, 1);
+		sound(SND.bell, id, 0.6, 0.8);
+		safe(() => api.shakePlayerCamera(id, 0.5, 2500));
+		if (pos) particleBurst([pos[0], pos[1] + 1.4, pos[2]], [255, 210, 90, 0.9]);
+	}
+
+	opt(id, "showProgressBar", true);
+	safe(() => api.progressBarUpdate(id, 1, 900));
+	opt(id, "music", "Juhani Junkala [Retro Game Music Pack] Ending");
+	opt(id, "musicVolumeLevel", 0.5);
+	opt(id, "fogChunkDistanceOverride", 52);
+	opt(id, "fogColourOverride", "#04050a");
+	opt(id, "ambientLightColourOverride", "#07070d");
+	opt(id, "skyLightColourOverride", "#100c18");
+	opt(id, "cameraTint", [0.08, 0.0, 0.0, 0.18]);
+	opt(id, "cameraRoll", 0);
+	opt(id, "visionMinLightColour", null);
+	opt(id, "fogOnSkybox", true);
+	opt(id, "middleTextTop", "BLOXDVOID_YT HORROR \u2014 100 DAYS");
+	opt(id, "middleTextUpper", "YOU SURVIVED");
+	opt(id, "middleTextLower", "THE BENEFACTOR IS GONE");
+	opt(id, "RightInfoText", finishStats(id));
+
+	st.dialogUntil = NOW + 60000;
+	opt(id, "dialogue", {
+		line: "You are still here. I did not think you would be.",
+		speakerName: { str: voice.label, style: { color: voice.colour, bold: true } },
+		voice: voice.voice,
+		animateIn: true,
+	});
+}
+
+function finishRun() {
+	if (RUN.finished) return;
+	RUN.finished = true;
+	RUN.finishedAt = NOW;
+	RUN.running = false;
+	RUN.jumpscares = 0;
+	clearHorrorMobs();
+	clearMeshes();
+
+	const ids = online();
+	for (let i = 0; i < ids.length; i++) {
+		const st = pstate(ids[i]);
+		st.blackoutUntil = 0;
+		st.wasBlackout = false;
+		st.dread = 0;
+		const record = clamp(Math.round(RUN.day), 1, CFG.MAX_DAY);
+		if (record > (Number(safe(() => api.getPlayerDbValue(ids[i], CFG.DB_BEST))) || 0)) {
+			safe(() => api.setPlayerDbValue(ids[i], CFG.DB_BEST, record));
+		}
+		safe(() => api.giveItem(ids[i], "Diamond", 10));
+		showFinishScreen(ids[i], true);
+	}
+	// one last look at the friend who sent all of this
+	if (ids.length > 0) spawnBenefactor(ids[0]);
+
+	shout(
+		RUN.day >= CFG.MAX_DAY
+			? "DAY 100 SURVIVED. The benefactor is out of ideas."
+			: "The run ended on day " + RUN.day + ".",
+		"yellow"
+	);
+	shout("Type /" + CFG.START_COMMAND + " to run it again.", "#8fd0ff");
+	saveRun();
 }
 
 /* ---------------------------------------------------------------------------
@@ -2114,6 +2386,8 @@ function saveRun() {
 		running: RUN.running,
 		deaths: RUN.deaths,
 		startedAt: RUN.startedAt,
+		runMs: Math.round(RUN.runMs),
+		finished: RUN.finished,
 	};
 	safe(() => api.setLobbyDbValue(CFG.DB_RUN, JSON.stringify(payload)));
 	RUN.lastSaveAt = NOW;
@@ -2135,6 +2409,8 @@ function loadRun() {
 	RUN.running = !!data.running;
 	RUN.deaths = Math.max(0, Number(data.deaths) || 0);
 	RUN.startedAt = Number(data.startedAt) || NOW;
+	RUN.runMs = Math.max(0, Number(data.runMs) || 0);
+	RUN.finished = !!data.finished;
 }
 
 /* ---------------------------------------------------------------------------
@@ -2282,6 +2558,7 @@ function tickCycle(dt) {
 	if (ids.length === 0) return; // do not burn the clock in an empty lobby
 
 	RUN.phaseMs += dt;
+	RUN.runMs += dt;
 	const len = phaseLength(RUN.phase);
 
 	if (RUN.phase === "night") {
@@ -2313,6 +2590,11 @@ function tickPlayers(dt) {
 			updateSanity(id, step);
 		}
 
+		if (NOW - (st.dreadAt || 0) >= CFG.DREAD_EVERY_MS) {
+			st.dreadAt = NOW;
+			dreadFx(id);
+		}
+
 		updateHud(id);
 		if (NOW - st.lastAtmos > CFG.ATMOS_EVERY_MS) {
 			st.lastAtmos = NOW;
@@ -2329,6 +2611,7 @@ tick = function (ms) {
 
 	runSched();
 	tickPlayers(dt);
+	tickDreadFx();
 	tickMeshes();
 	tickMobs();
 	tickCycle(dt);
@@ -2342,11 +2625,15 @@ tick = function (ms) {
 function welcome(id) {
 	const st = pstate(id);
 	st.sanity = CFG.SANITY_MAX;
+	opt(id, "showProgressBar", true);
 	applyAtmosphere(id);
 	updateHud(id);
 	say(id, "BLOXDVOID_YT HORROR \u2014 100 DAYS", "#a83232");
 	say(id, "Day " + RUN.day + " / 100. Horrors active: " + activeHorrors().length + ".", "gray");
-	if (RUN.phase === "night") {
+	if (RUN.finished) {
+		showFinishScreen(id, false);
+		say(id, "You finished this run. /" + CFG.START_COMMAND + " starts a new one.", "yellow");
+	} else if (RUN.phase === "night") {
 		say(id, "It is night. It is already night.", "#a83232");
 	} else if (!RUN.running) {
 		say(id, "Type /" + CFG.START_COMMAND + " to begin the run.", "yellow");
@@ -2411,7 +2698,7 @@ playerCommand = function (playerId, command) {
 		say(playerId, "/horror start | stop | pause | resume | skip | night", "gray");
 		say(playerId, "/horror mods | mod <day> | day (info)", "gray");
 		if (admin) {
-			say(playerId, "/horror day <1-100> | boss | clear | meshes | sanity <n> | reset", "#8fd0ff");
+			say(playerId, "/horror day <1-100> | boss | clear | meshes | sanity <n> | finish | reset", "#8fd0ff");
 			say(playerId, "/horror say <voice> <text> \u2014 voices: benefactor, unknown, watcher, crone, system", "#8fd0ff");
 			say(playerId, "/horror length <dayMin> <nightMin> | test <tag>", "#8fd0ff");
 		}
@@ -2463,6 +2750,10 @@ playerCommand = function (playerId, command) {
 	}
 
 	if (sub === "resume") {
+		if (RUN.finished) {
+			say(playerId, "The run is finished. Use /" + CFG.START_COMMAND + " to start again.", "yellow");
+			return false;
+		}
 		RUN.running = true;
 		saveRun();
 		say(playerId, "Clock resumed.", "#55ff55");
@@ -2554,22 +2845,38 @@ playerCommand = function (playerId, command) {
 		return false;
 	}
 
+	if (sub === "finish") {
+		finishRun();
+		return false;
+	}
+
 	if (sub === "reset") {
 		clearHorrorMobs();
+		clearMeshes();
 		RUN.day = 1;
 		RUN.deaths = 0;
 		RUN.running = false;
+		RUN.finished = false;
+		RUN.finishedAt = 0;
+		RUN.runMs = 0;
 		RUN.phase = "dawn";
 		RUN.phaseMs = 0;
 		RUN.startedAt = 0;
 		saveRun();
-		for (let i = 0; i < online().length; i++) {
-			const st = pstate(online()[i]);
+		const ids = online();
+		for (let i = 0; i < ids.length; i++) {
+			const st = pstate(ids[i]);
 			st.sanity = CFG.SANITY_MAX;
 			st.flags = {};
-			resetAtmosphere(online()[i]);
+			st.blackoutUntil = 0;
+			st.wasBlackout = false;
+			clearFinishScreen(ids[i]);
+			opt(ids[i], "music", null);
+			opt(ids[i], "musicVolumeLevel", 0.6);
+			opt(ids[i], "showProgressBar", true);
+			resetAtmosphere(ids[i]);
 		}
-		shout("Run wiped. Day 1. /horror start when ready.", "yellow");
+		shout("Run wiped. Day 1. /" + CFG.START_COMMAND + " when ready.", "yellow");
 		return false;
 	}
 
@@ -2589,13 +2896,31 @@ function startRun(playerId) {
 		RUN.deaths = 0;
 	}
 	RUN.running = true;
+	RUN.finished = false;
+	RUN.finishedAt = 0;
+	RUN.runMs = 0;
+	RUN.jumpscares = 0;
 	RUN.startedAt = NOW;
 	if (RUN.day < 1) RUN.day = 1;
 	RUN.phase = "dawn";
 	RUN.phaseMs = 0;
+	const ids = online();
+	for (let i = 0; i < ids.length; i++) {
+		const st = pstate(ids[i]);
+		st.sanity = CFG.SANITY_MAX;
+		st.flags = {};
+		st.blackoutUntil = 0;
+		st.wasBlackout = false;
+		clearFinishScreen(ids[i]);
+		opt(ids[i], "showProgressBar", true);
+		opt(ids[i], "musicVolumeLevel", 0.6);
+	}
 	enterDawn(true);
 	shout("THE HUNDRED DAYS BEGIN \u2014 started by " + nameOf(playerId) + ".", "#a83232");
 	say(playerId, "Run started. Day " + RUN.day + ". Good luck.", "#55ff55");
+	later(1500, () =>
+		speakAll("benefactor", "One hundred days. One new horror every night. Do not disappoint me.")
+	);
 	return true;
 }
 
@@ -2699,6 +3024,8 @@ function boot() {
 			RUN.nextEventAt = NOW + 15000;
 		}
 		shout("Horror run restored \u2014 day " + RUN.day + ", " + phaseName() + ".", "gray");
+	} else if (RUN.finished) {
+		shout("Day 100 complete. Type /" + CFG.START_COMMAND + " to run it again.", "gray");
 	}
 	safe(() => api.log("Bloxdvoid_YT Horror 100 loaded. Day " + RUN.day + "."));
 }
