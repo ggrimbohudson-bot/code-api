@@ -46,12 +46,12 @@ METEOR_NEAR_MAX: 200,
 METEOR_SKY_Y: 140,
 RTP_FLOOR_Y: 64,
 RTP_DROP_Y: 170,
-RTP_SETTLE_MS: 8000,
+RTP_SETTLE_MS: 20000,
 WORLD_BORDER: 100000,
 TUTORIAL_GAP_MS: 9000,
 RTP_CENTRE: [0, 0],
 RTP_MIN_DIST: 80,
-RTP_RADIUS: 500,
+RTP_RADIUS: 50000,
 RTP_TOP_Y: 160,
 RTP_MIN_Y: -60,
 RTP_TRIES: 10,
@@ -3051,14 +3051,19 @@ return null;
 }
 function randomSurfaceSpot() {
 for (let tries = 0; tries < CFG.RTP_TRIES; tries++) {
-const angle = Math.random() * Math.PI * 2;
-const dist = CFG.RTP_MIN_DIST + Math.random() * (CFG.RTP_RADIUS - CFG.RTP_MIN_DIST);
-const x = Math.round(CFG.RTP_CENTRE[0] + Math.cos(angle) * dist);
-const z = Math.round(CFG.RTP_CENTRE[1] + Math.sin(angle) * dist);
-const y = findSurface(x, z);
-if (y !== null) return [x, y, z];
+const spot = randomWarpColumn();
+const y = findSurface(spot[0], spot[1]);
+if (y !== null) return [spot[0], y, spot[1]];
 }
 return null;
+}
+function randomWarpColumn() {
+const x = Math.round(CFG.RTP_CENTRE[0] + (Math.random() * 2 - 1) * CFG.RTP_RADIUS);
+const z = Math.round(CFG.RTP_CENTRE[1] + (Math.random() * 2 - 1) * CFG.RTP_RADIUS);
+if (Math.abs(x - CFG.RTP_CENTRE[0]) + Math.abs(z - CFG.RTP_CENTRE[1]) < CFG.RTP_MIN_DIST) {
+return randomWarpColumn();
+}
+return [x, z];
 }
 function dropOnGround(playerId, x, z) {
 if (!playerId) return false;
@@ -3094,10 +3099,9 @@ function rtpPlayer(playerId, now) {
 const spot = randomSurfaceSpot();
 const drops = RT[playerId] || (RT[playerId] = {});
 if (!spot) {
-const angle = Math.random() * Math.PI * 2;
-const dist = Math.round(CFG.RTP_MIN_DIST + Math.random() * (CFG.RTP_RADIUS - CFG.RTP_MIN_DIST));
-const x = Math.round(CFG.RTP_CENTRE[0] + Math.cos(angle) * dist);
-const z = Math.round(CFG.RTP_CENTRE[1] + Math.sin(angle) * dist);
+const spot = randomWarpColumn();
+const x = spot[0];
+const z = spot[1];
 if (!dropOnGround(playerId, x, z)) {
 say(playerId, "The portal fizzles - try again.", "#ff5555");
 return false;
@@ -4972,7 +4976,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-AEVORA-4";
+const BUILD = "VB-AEVORA-5";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
