@@ -77,7 +77,7 @@ MAX_MUTE_MIN: 1440,
 MAX_TEMP_BAN_DAYS: 30,
 WARNS_MAX: 120,
 };
-const OWNER_NAMES = ["xvexx", "itzkasaixyt"];
+const OWNER_NAMES = ["xvexx", "polyduck"];
 const RANKS = {
 owner: { key: "owner", name: "Founder", tag: "FOUNDER", colour: "#ffcc00", icon: "fa-solid fa-crown", nameColour: "yellow", level: 4 },
 admin: { key: "admin", name: "Admin", tag: "ADMIN", colour: "#ff5555", icon: "fa-solid fa-shield-halved", nameColour: "red", level: 3 },
@@ -231,9 +231,9 @@ const METEOR_EXTRAS = [
 ];
 const TUTORIAL_KEY = "vb_tutorial_v1";
 const TUTORIAL_STEPS = [
-{ name: "WELCOME", colour: "#55aaff", lines: ["Welcome to VOIDBOUND SMP - a short walkthrough runs while you settle in.", "Void Shards are the only currency: kills, mobs and playtime pay you.", "Check yourself with /stats, your quests with /quests and every command with /help."] },
+{ name: "WELCOME", colour: "#55aaff", lines: ["Welcome to AEVORA SMP - a short walkthrough runs while you settle in.", "Void Shards are the only currency: kills, mobs and playtime pay you.", "Check yourself with /stats, your quests with /quests and every command with /help."] },
 { name: "GEAR", colour: "#55ff55", lines: ["/weapons shows every blade and its D, S and C, then /weapon buy <id>.", "/armour sells four piece sets - wear all four and the set ability switches on.", "Gear wears down as it saves you, so keep shards coming in."] },
-{ name: "QUESTS", colour: "#ffd75e", lines: ["Four givers wait in the lobby: xVexx, TECMAN_, Conceptual and ItzKasaiXYT.", "Right-click one, or type /quest fishing to take their job.", "Quests are the fastest XP in the game and they pay shards as well."] },
+{ name: "QUESTS", colour: "#ffd75e", lines: ["Four givers wait in the lobby: xVexx, TECMAN_, Conceptual and PolyDuck.", "Right-click one, or type /quest fishing to take their job.", "Quests are the fastest XP in the game and they pay shards as well."] },
 { name: "PRESTIGE", colour: "#b48cff", lines: ["Reach level " + CFG.LEVEL_CAP + ", then right-click BloxdSeno at 50011 60001 49999.", "Each prestige grants one shard: 10 shards per stat, +50% each.", "40 prestiges fills every stat, and the level cap lifts after that."] },
 { name: "METEORS", colour: "#ff9c55", lines: ["A meteor falls once an hour, ringed in crystal with one piece of loot.", "/meteortp drops you within 1000 blocks of it - the chest fills as you arrive.", "The world border is 100000 blocks out on each side, so do not wander past it."] },
 { name: "READY", colour: "#8fd0ff", lines: ["That is the whole game: earn, gear up, quest, prestige, hunt meteors.", "Ranks get the staff menu on B or N, and /panel hides the side panel.", "/tutorial next, /tutorial restart or /tutorial skip whenever you want."] },
@@ -1877,8 +1877,8 @@ say(playerId, "Only the owner can break blocks within 100x100 of the arena or th
 say(playerId, "No hitting in the lobby or at the black portal.", "#8a8a8a");
 say(playerId, "QUESTS", "#55aaff");
 say(playerId, "  /quests - your quests and XP", "#ffffff");
-say(playerId, "  /quest <fishing|hunting|mining|killing> - talk to a giver", "#ffffff");
-say(playerId, "  Givers: xVexx the Angler, TECMAN_ the Monster Hunter, Conceptual the Assassin, ItzKasaiXYT the Killer.", "#8a8a8a");
+say(playerId, "  /quest <fishing|hunting|mining|lumber> - talk to a giver", "#ffffff");
+say(playerId, "  Givers: xVexx the Angler, TECMAN_ the Monster Hunter, Conceptual the Assassin, PolyDuck the Lumberjack.", "#8a8a8a");
 say(playerId, "  /prestige - BloxdSeno at 50011 60001 49999, right-click at level " + CFG.LEVEL_CAP + ".", "#ffd75e");
 if (isOwner(playerId)) say(playerId, "  /aim <degrees> - turn BloxdSeno, /aim +15 or -15 to nudge", "#ffffff");
 say(playerId, "SERVER", "#55aaff");
@@ -1910,7 +1910,7 @@ say(playerId, "Overall level " + levelFor(d.stats.xp) + "  |  " + fmtNum(d.stats
 say(playerId, skillSummary(playerId), "#8a8a8a");
 richSay(playerId, [
 segIcon("fa-solid fa-user"),
-segText(" VOIDBOUND ", "#ffcc00"),
+segText(" AEVORA ", "#ffcc00"),
 segText("| ", "#5a5a5a"),
 segText(nameOf(playerId), r.level > 0 ? r.colour : "#ffffff"),
 ]);
@@ -1978,7 +1978,7 @@ const rows = rankedBy(key);
 const label = key === "prestige" ? "PRESTIGES" : key === "shards" ? "VOID SHARDS" : key === "playtime" ? "PLAYTIME" : "KILLS";
 richSay(playerId, [
 segIcon("fa-solid fa-trophy", "#ffcc00"),
-segText(" VOIDBOUND LEADERBOARD ", "#ffcc00"),
+segText(" AEVORA LEADERBOARD ", "#ffcc00"),
 segText("| " + label, "#8a8a8a"),
 ]);
 say(playerId, onlineCount() + " online  |  top " + Math.min(CFG.TOP_N, rows.length) + "  |  /lb kills, shards, playtime, prestige", "#5a5a5a");
@@ -2596,7 +2596,7 @@ say(playerId, "Idea board cleared.", "#55ff55");
 return;
 }
 const items = LISTS.events.items;
-say(playerId, "VOIDBOUND EVENTS (" + items.length + ")", "#55aaff");
+say(playerId, "AEVORA EVENTS (" + items.length + ")", "#55aaff");
 if (!items.length) {
 say(playerId, "  Nothing scheduled. Propose one with /event idea <text>.", "#8a8a8a");
 return;
@@ -2647,7 +2647,7 @@ say(playerId, "No update with that id.", "#ff5555");
 return;
 }
 const items = LISTS.updates.items;
-say(playerId, "VOIDBOUND UPDATE LOG (" + items.length + ")", "#55aaff");
+say(playerId, "AEVORA UPDATE LOG (" + items.length + ")", "#55aaff");
 if (!items.length) {
 say(playerId, "  No updates logged yet.", "#8a8a8a");
 return;
@@ -3377,7 +3377,7 @@ function cmdStaff(playerId) {
 const list = staffList();
 richSay(playerId, [
 segIcon("fa-solid fa-shield", "#ffcc00"),
-segText(" VOIDBOUND STAFF ", "#ffcc00"),
+segText(" AEVORA STAFF ", "#ffcc00"),
 segText("| " + list.length + " online", "#8a8a8a"),
 ]);
 if (!list.length) {
@@ -3458,7 +3458,7 @@ const label = RANKS[want].name;
 say(playerId, name + " is now " + label + ".", "#55ff55");
 staffBroadcast("[STAFF] " + nameOf(playerId) + " set " + name + "'s rank to " + label + ".", "#ffcc00");
 if (target) {
-say(target, "Your Voidbound rank is now " + label + ".", RANKS[want].colour);
+say(target, "Your Aevora rank is now " + label + ".", RANKS[want].colour);
 syncClientButtons(target);
 syncBoard(target);
 applyRankCosmetics(target);
@@ -3473,7 +3473,7 @@ deny(playerId, "panel");
 return;
 }
 const r = rankInfo(playerId);
-say(playerId, "== VOIDBOUND STAFF PANEL ==", "#ffcc00");
+say(playerId, "== AEVORA STAFF PANEL ==", "#ffcc00");
 say(playerId, nameOf(playerId) + "  |  " + r.name + "  |  Online " + onlineCount(), r.colour);
 say(playerId, "Press B for the button version of everything below.", "#55ff55");
 say(playerId, "MOVEMENT", "#55aaff");
@@ -4073,16 +4073,16 @@ questStep("No Witnesses", 180, 400, 150, "Leave nothing behind. One hundred and 
 endless: { name: "Clean Contract", need: 240, step: 80, shards: 520, shardStep: 95, xp: 200, xpStep: 40, line: "Every wall is a way in. Keep digging." },
 x: 9991, y: -9999, z: 9991,
 },
-killing: {
-name: "Player Kills", short: "Kills", title: "Killer", who: "ItzKasaiXYT", icon: "fa-solid fa-swords", colour: "#ff5555",
-verb: "Kill", unit: "kills",
+lumber: {
+name: "Lumberjacking", short: "Wood", title: "Lumberjack", who: "PolyDuck", icon: "fa-solid fa-tree", colour: "#c98a4b",
+verb: "Chop", unit: "logs",
 chain: [
-questStep("First Blood", 1, 160, 60, "One kill. Make it clean and make it count."),
-questStep("Body Count", 3, 240, 90, "Three kills. Do not waste my time on the easy ones."),
-questStep("Rampage", 6, 340, 125, "Six without dying and I will notice you."),
-questStep("Void Reaper", 10, 470, 175, "Ten kills. Then we talk about the good contracts."),
+questStep("Kindling", 20, 160, 60, "Twenty logs. Small stack, but it proves you can swing."),
+questStep("Timber Run", 45, 240, 90, "Forty five logs. My yard does not fill itself."),
+questStep("Clear Cut", 80, 340, 125, "Eighty logs. I count trunks, not stumps."),
+questStep("Old Growth", 130, 470, 175, "One hundred and thirty logs. Then we talk about the good groves."),
 ],
-endless: { name: "Open Bounty", need: 14, step: 4, shards: 600, shardStep: 110, xp: 230, xpStep: 46, line: "The list is never empty. Pick a name." },
+endless: { name: "Open Grove", need: 180, step: 50, shards: 600, shardStep: 110, xp: 230, xpStep: 46, line: "The forest never runs dry. Back to the grove." },
 x: 10009, y: -9999, z: 9991,
 },
 };
@@ -4142,8 +4142,8 @@ say(playerId, "Prestige " + p.count + "/" + CFG.PRESTIGE_MAX + "  |  cap " + (p.
 }
 const DISCORD_LINK = "https://discord.gg/crWR7Xx6bZ";
 const FANCY_TITLE = true;
-const GAME_TITLE = "VOIDBOUND SMP";
-const FANCY_NAME = "𝕍𝕆𝕀𝔻𝔹𝕆𝕌ℕ𝔻";
+const GAME_TITLE = "AEVORA SMP";
+const FANCY_NAME = "𝔸𝔼𝕍𝕆𝕄𝔸";
 function gameTitle() {
 return FANCY_TITLE ? FANCY_NAME + " 𝕊𝕄ℙ" : GAME_TITLE;
 }
@@ -4160,7 +4160,7 @@ const GIVER_LOOKS = {
 fishing: { size: 1.05, heads: ["trader_blue"] },
 hunting: { size: 0.95, heads: ["monster_hunter_lorenzo"] },
 mining: { size: 1.2, heads: ["zombie"] },
-killing: { size: 1.35, heads: ["general"] },
+lumber: { size: 1.15, heads: ["farmer"] },
 };
 const GIVER_SKIN_KEY = "vb_giver_skin_v1";
 const GIVER_SKINS = {};
@@ -4192,13 +4192,13 @@ const GIVER_TAGS = {
 fishing: { mark: "\u2726", sub: "RIGHT-CLICK FOR A QUEST" },
 hunting: { mark: "\u2620", sub: "RIGHT-CLICK FOR A QUEST" },
 mining: { mark: "\u26cf", sub: "RIGHT-CLICK FOR A QUEST" },
-killing: { mark: "\u2694", sub: "RIGHT-CLICK FOR A QUEST" },
+lumber: { mark: "\u2692", sub: "RIGHT-CLICK FOR A QUEST" },
 };
 const GIVER_NAME_COLOUR = {
 fishing: "aqua",
 hunting: "pink",
 mining: "cyan",
-killing: "red",
+lumber: "orange",
 };
 function giverNameTag(type) {
 const giver = QUEST_TYPES[type];
@@ -4288,7 +4288,7 @@ GIVER_YAW[key] = isFinite(value) ? value : 0;
 function saveGiverYaw() {
 try { api.setLobbyDbValue(GIVER_YAW_KEY, JSON.stringify(GIVER_YAW)); } catch (e) { }
 }
-const GIVER_BASE_YAW = { fishing: 180, hunting: 60, mining: 315, killing: 225 };
+const GIVER_BASE_YAW = { fishing: 180, hunting: 60, mining: 315, lumber: 225 };
 function giverYaw(type) {
 const giver = QUEST_TYPES[type];
 const base = isFinite(GIVER_BASE_YAW[type])
@@ -4328,7 +4328,7 @@ try { api.setEntityRotation(eId, 0, giverYaw(type), 0); } catch (e) { }
 function cmdDiag(playerId) {
 const ids = [];
 for (const key in QUEST_NPCS) ids.push(key + "=" + QUEST_NPCS[key]);
-say(playerId, "VOIDBOUND DIAG", "#ffcc00");
+say(playerId, "AEVORA DIAG", "#ffcc00");
 say(playerId, "givers " + ids.length + "/4  prestige " + (PRESTIGE_NPC ? "up" : "missing") + "  " + (ids.join("  ") || "none spawned"), "#8a8a8a");
 say(playerId, "prestige yaw " + prestigeYaw() + " (default " + wrapAngle(CFG.PRESTIGE_YAW) + ") - owner /aim <degrees>", "#8a8a8a");
 say(playerId, "side panel " + (PANEL_OFF[playerId] ? "hidden by /panel" : "on"), "#8a8a8a");
@@ -4528,7 +4528,7 @@ const d = ensure(playerId);
 const level = levelFor(d.stats.xp);
 richSay(playerId, [
 segIcon("fa-solid fa-ranking-star", "#ffcc00"),
-segText(" VOIDBOUND QUESTS ", "#ffcc00"),
+segText(" AEVORA QUESTS ", "#ffcc00"),
 segText("| level " + level, "#8a8a8a"),
 ]);
 say(playerId, "XP " + fmtNum(d.stats.xp) + "  |  " + xpIntoLevel(d.stats.xp) + "/" + xpToNextLevel(d.stats.xp) + " to level " + (level + 1), "#b48cff");
@@ -4557,7 +4557,7 @@ segText("  " + fmtNum(quest.shards) + " shards + " + questXpFor(playerId, quest.
 segText(done ? "  CLAIM" : "", "#55ff55"),
 ]);
 }
-say(playerId, "No giver nearby? /quest fishing, hunting, mining or killing.", "#5a5a5a");
+say(playerId, "No giver nearby? /quest fishing, hunting, mining or lumber.", "#5a5a5a");
 }
 onPlayerJoin = function (playerId) {
 pruneStaff();
@@ -4669,7 +4669,6 @@ handleStaffMenuBuy(playerId, categoryKey, itemKey, userInput);
 onPlayerKilledOtherPlayer = function (attackingPlayer, killedPlayer, damageDealt, withItem) {
 const d = ensure(attackingPlayer);
 d.stats.kills++;
-questProgress(attackingPlayer, "killing", 1);
 addShards(attackingPlayer, CFG.KILL_SHARDS, true);
 gainXp(attackingPlayer, CFG.XP_KILL);
 say(attackingPlayer, "Kill! +" + fmtNum(CFG.KILL_SHARDS) + " " + CFG.CURRENCY_NAME, "#ff6666");
@@ -4700,6 +4699,8 @@ if (!playerId) return;
 if (String(toBlock) !== "Air") return;
 if (!fromBlock || String(fromBlock) === "Air") return;
 questProgress(playerId, "mining", 1);
+const chopped = String(fromBlock).split("[")[0].trim();
+if (/ log$/i.test(chopped)) questProgress(playerId, "lumber", 1);
 gainXp(playerId, CFG.XP_MINE);
 };
 onPlayerAltAction = function (playerId, x, y, z, block, targetEId) {
@@ -4772,14 +4773,14 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-METEOR-6";
+const BUILD = "VB-AEVORA-1";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
 const args = text.split(/\s+/);
 const cmd = (args[0] || "").toLowerCase();
 if (cmd === "version" || cmd === "build") {
-say(playerId, "Voidbound world code: " + BUILD, "#8fd0ff");
+say(playerId, "Aevora world code: " + BUILD, "#8fd0ff");
 return;
 }
 if (cmd === "help" || cmd === "commands" || cmd === "cmds" || cmd === "cmd" || cmd === "?") {
@@ -4810,7 +4811,7 @@ cmdQuests(playerId);
 } else if (QUEST_TYPES[type]) {
 questTalkThrottled(playerId, type);
 } else {
-say(playerId, "Usage: /quest <fishing|hunting|mining|killing>", "#ff5555");
+say(playerId, "Usage: /quest <fishing|hunting|mining|lumber>", "#ff5555");
 }
 return false;
 }
@@ -4887,7 +4888,7 @@ cmdPanel(playerId);
 return false;
 }
 if (cmd === "discord" || cmd === "dc") {
-say(playerId, "VOIDBOUND SMP Discord:", "#55aaff");
+say(playerId, "AEVORA SMP Discord:", "#55aaff");
 say(playerId, DISCORD_LINK, "#8fd0ff");
 say(playerId, "Chat links are not clickable - copy it into your browser.", "#5a5a5a");
 return false;

@@ -1,4 +1,4 @@
-// VOIDBOUND prestige - Health
+// AEVORA prestige - Health
 // 1 prestige shard = +5% max health, up to 10 shards (150 HP).
 //
 // Paste this into a code block. It reads the same save the world code writes,

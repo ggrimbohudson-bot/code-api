@@ -1,4 +1,4 @@
-// VOIDBOUND prestige - Speed
+// AEVORA prestige - Speed
 // 1 prestige shard = +5% movement speed, up to 10 shards (+50%).
 //
 // Paste this into a code block. It reads the same save the world code writes,

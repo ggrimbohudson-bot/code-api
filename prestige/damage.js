@@ -1,4 +1,4 @@
-// VOIDBOUND prestige - Damage
+// AEVORA prestige - Damage
 // 1 prestige shard = +5% damage dealt, up to 10 shards (+50%).
 //
 // Paste this into a code block. It reads the same save the world code writes,

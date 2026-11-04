@@ -1,4 +1,4 @@
-// VOIDBOUND prestige - XP
+// AEVORA prestige - XP
 // 1 prestige shard = +5% XP, up to 10 shards (+50%).
 //
 // XP is awarded by the world code, so a code block cannot multiply it. This
