@@ -16,13 +16,13 @@ PORTAL_CHECK_MS: 400,
 PORTAL_COOLDOWN_MS: 4000,
 BLACK_PORTAL_DEST: [50000.5, 60001, 49999.5],
 ORANGE_PORTAL_DEST: [637, -99932, -396],
-ARENA_DEST: [9063.5, 9991, 9744.5],
+ARENA_DEST: [9089.5, 9989, 7768.5],
 ARENA_GRACE_MS: 5000,
 ZONE_HALF: 50,
 ZONE_Y: 120,
 PROTECT_RADIUS: 1000,
 PROTECT_Y: 1000,
-PROTECT_ZONES: [[651.5, -99943, -98.5], [637, -99932, -396], [9063.5, 9991, 9744.5]],
+PROTECT_ZONES: [[651.5, -99943, -98.5], [637, -99932, -396], [9089.5, 9989, 7768.5]],
 ARENA_GRACE_EFFECT: "Damage Reduction",
 GIVER_TALK_RANGE: 5,
 PRESTIGE_POS: [603.5, -99943, -110.5],
@@ -5042,7 +5042,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-AEVORA-7";
+const BUILD = "VB-AEVORA-8";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
