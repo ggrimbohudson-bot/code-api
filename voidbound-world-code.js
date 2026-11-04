@@ -21,7 +21,7 @@ ZONE_HALF: 50,
 ZONE_Y: 120,
 ARENA_GRACE_EFFECT: "Damage Reduction",
 GIVER_TALK_RANGE: 5,
-PRESTIGE_POS: [50011.5, 60001, 49999.5],
+PRESTIGE_POS: [603.5, -99943, -110.5],
 PRESTIGE_YAW: 90,
 PRESTIGE_STEP: 0.05,
 PRESTIGE_STAT_MAX: 10,
@@ -234,8 +234,9 @@ const TUTORIAL_STEPS = [
 { name: "WELCOME", colour: "#55aaff", lines: ["Welcome to AEVORA SMP - a short walkthrough runs while you settle in.", "Void Shards are the only currency: kills, mobs and playtime pay you.", "Check yourself with /stats, your quests with /quests and every command with /help."] },
 { name: "GEAR", colour: "#55ff55", lines: ["/weapons shows every blade and its D, S and C, then /weapon buy <id>.", "/armour sells four piece sets - wear all four and the set ability switches on.", "Gear wears down as it saves you, so keep shards coming in."] },
 { name: "QUESTS", colour: "#ffd75e", lines: ["Four givers wait in the lobby: xVexx, TECMAN_, Conceptual and PolyDuck.", "Right-click one, or type /quest fishing to take their job.", "Quests are the fastest XP in the game and they pay shards as well."] },
-{ name: "PRESTIGE", colour: "#b48cff", lines: ["Reach level " + CFG.LEVEL_CAP + ", then right-click BloxdSeno at 50011 60001 49999.", "Each prestige grants one shard: 10 shards per stat, +50% each.", "40 prestiges fills every stat, and the level cap lifts after that."] },
+{ name: "PRESTIGE", colour: "#b48cff", lines: ["Reach level " + CFG.LEVEL_CAP + ", then right-click BloxdSeno at 603.5 -99943 -110.5.", "Each prestige grants one shard: 10 shards per stat, +50% each.", "40 prestiges fills every stat, and the level cap lifts after that."] },
 { name: "METEORS", colour: "#ff9c55", lines: ["A meteor falls once an hour, ringed in crystal with one piece of loot.", "/meteortp drops you within 1000 blocks of it - the chest fills as you arrive.", "The world border is 100000 blocks out on each side, so do not wander past it."] },
+{ name: "GAMBLER", colour: "#ffd75e", lines: ["A gambler stands at 603.5 -99943 -85.5 with one free roll every 24 hours.", "Right-click him for a random stack of a survival item or block.", "/gamble does the same from anywhere."] },
 { name: "READY", colour: "#8fd0ff", lines: ["That is the whole game: earn, gear up, quest, prestige, hunt meteors.", "Ranks get the staff menu on B or N, and /panel hides the side panel.", "/tutorial next, /tutorial restart or /tutorial skip whenever you want."] },
 ];
 let METEOR = null;
@@ -1083,6 +1084,7 @@ rewards: {},
 quests: {},
 skills: {},
 prestige: { count: 0, speed: 0, damage: 0, health: 0, xp: 0 },
+gamble: { last: 0, rolls: 0, best: "" },
 };
 }
 function num(v) {
@@ -1148,6 +1150,11 @@ if (old.prestige && typeof old.prestige === "object") {
 const saved = old.prestige;
 d.prestige.count = Math.min(CFG.PRESTIGE_MAX, num(saved.count));
 for (let i = 0; i < PRESTIGE_STATS.length; i++) d.prestige[PRESTIGE_STATS[i]] = Math.min(CFG.PRESTIGE_STAT_MAX, num(saved[PRESTIGE_STATS[i]]));
+}
+if (old.gamble && typeof old.gamble === "object") {
+d.gamble.last = num(old.gamble.last);
+d.gamble.rolls = num(old.gamble.rolls);
+d.gamble.best = typeof old.gamble.best === "string" ? old.gamble.best.slice(0, 40) : "";
 }
 return d;
 }
@@ -1865,6 +1872,7 @@ say(playerId, "  /armour buy <set> - the full four piece set", "#ffffff");
 say(playerId, "  /armour wear is gone - just wear all four pieces in game", "#8a8a8a");
 say(playerId, "  /rewards - playtime rewards", "#ffffff");
 say(playerId, "  /rewards claim - take everything ready", "#ffffff");
+say(playerId, "  /gamble - the Gambler free roll, once every 24 hours", "#ffffff");
 if (hasPerm(playerId, "clearinv")) say(playerId, "  /clearinv <player> - empty a player's inventory", "#ffffff");
 say(playerId, "TRAVEL", "#55aaff");
 say(playerId, "  /spawn - back to the lobby", "#ffffff");
@@ -1879,8 +1887,8 @@ say(playerId, "QUESTS", "#55aaff");
 say(playerId, "  /quests - your quests and XP", "#ffffff");
 say(playerId, "  /quest <fishing|hunting|mining|lumber> - talk to a giver", "#ffffff");
 say(playerId, "  Givers: xVexx the Angler, TECMAN_ the Monster Hunter, Conceptual the Assassin, PolyDuck the Lumberjack.", "#8a8a8a");
-say(playerId, "  /prestige - BloxdSeno at 50011 60001 49999, right-click at level " + CFG.LEVEL_CAP + ".", "#ffd75e");
-if (isOwner(playerId)) say(playerId, "  /aim <degrees> - turn BloxdSeno, /aim +15 or -15 to nudge", "#ffffff");
+say(playerId, "  /prestige - BloxdSeno at 603.5 -99943 -110.5, right-click at level " + CFG.LEVEL_CAP + ".", "#ffd75e");
+if (isOwner(playerId)) say(playerId, "  /aim - angles for Seno, the Gambler and every giver; /aim <npc|all> <degrees>", "#ffffff");
 say(playerId, "SERVER", "#55aaff");
 say(playerId, "  /events - scheduled events", "#ffffff");
 say(playerId, "  /event idea <text> - propose an event", "#ffffff");
@@ -2129,27 +2137,94 @@ function applyPrestigeYaw() {
 if (!PRESTIGE_NPC) return;
 try { api.setEntityRotation(PRESTIGE_NPC, 0, prestigeYaw(), 0); } catch (e) { }
 }
-function setPrestigeYaw(playerId, degrees) {
+const AIM_KEYS = ["seno", "gambler", "fishing", "hunting", "mining", "lumber"];
+function aimKey(raw) {
+const k = String(raw || "").toLowerCase();
+if (k === "seno" || k === "bloxdseno" || k === "prestige") return "seno";
+if (k === "gambler" || k === "gamble" || k === "roll") return "gambler";
+return QUEST_TYPES[k] ? k : null;
+}
+function aimWho(key) {
+if (key === "seno") return PRESTIGE_NPC_NAME;
+if (key === "gambler") return GAMBLER_NAME;
+return QUEST_TYPES[key].who;
+}
+function aimAngle(key) {
+if (key === "seno") return Math.round(prestigeYaw());
+if (key === "gambler") return Math.round(gamblerYaw());
+return Math.round(giverYaw(key));
+}
+function aimApply(key, degrees) {
+if (key === "seno") {
 PRESTIGE_ANGLE = wrapAngle(degrees);
 try { api.setLobbyDbValue(PRESTIGE_YAW_KEY, String(PRESTIGE_ANGLE)); } catch (e) { noteError("prestige yaw save", e); }
 applyPrestigeYaw();
-say(playerId, PRESTIGE_NPC_NAME + " now faces yaw " + prestigeYaw() + " degrees.", "#55ff55");
+return;
+}
+if (key === "gambler") {
+GAMBLER_ANGLE = wrapAngle(degrees);
+try { api.setLobbyDbValue(GAMBLER_YAW_KEY, String(GAMBLER_ANGLE)); } catch (e) { noteError("gambler yaw save", e); }
+applyGamblerYaw();
+return;
+}
+GIVER_YAW[key] = wrapAngle(wrapAngle(degrees) - giverBaseYaw(key));
+applyGiverYaw(key);
+saveGiverYaw();
+}
+function aimList(playerId) {
+say(playerId, "NPC ANGLES", "#ffcc00");
+for (let i = 0; i < AIM_KEYS.length; i++) {
+const key = AIM_KEYS[i];
+say(playerId, "  " + key + " (" + aimWho(key) + ") " + aimAngle(key) + " deg", "#8a8a8a");
+}
+say(playerId, "/aim <npc|all> <degrees> sets it, /aim <npc|all> +15 nudges it.", "#ffffff");
 }
 function cmdAim(playerId, args) {
 if (!isOwner(playerId)) return deny(playerId, "aim");
-const raw = String(args[1] || "").trim();
-if (!raw) {
-say(playerId, PRESTIGE_NPC_NAME + " angle: " + prestigeYaw() + " degrees (default " + wrapAngle(CFG.PRESTIGE_YAW) + ").", "#b48cff");
-say(playerId, "/aim 90 sets it. /aim +15 or /aim -15 nudges it.", "#ffffff");
+const first = String(args[1] || "").trim();
+if (!first) {
+aimList(playerId);
 return false;
 }
-const value = Number(raw);
+const key = aimKey(first);
+const second = String(args[2] !== undefined ? args[2] : "").trim();
+if (key) {
+if (!second) {
+say(playerId, aimWho(key) + " faces " + aimAngle(key) + " degrees. /aim " + key + " <degrees> sets it.", "#b48cff");
+return false;
+}
+const value = Number(second);
 if (!isFinite(value)) {
-say(playerId, "Usage: /aim <degrees>  or  /aim +15 / /aim -15", "#ff5555");
+say(playerId, "Usage: /aim " + key + " <degrees>  or  /aim " + key + " +15", "#ff5555");
 return false;
 }
-const relative = raw.charAt(0) === "+" || raw.charAt(0) === "-";
-setPrestigeYaw(playerId, relative ? prestigeYaw() + value : value);
+const relative = second.charAt(0) === "+" || second.charAt(0) === "-";
+aimApply(key, wrapAngle(relative ? aimAngle(key) + value : value));
+say(playerId, aimWho(key) + " now faces yaw " + aimAngle(key) + " degrees.", "#55ff55");
+return false;
+}
+if (first.toLowerCase() === "all") {
+const value = Number(second);
+if (!second || !isFinite(value)) {
+say(playerId, "Usage: /aim all <degrees>", "#ff5555");
+return false;
+}
+const relative = second.charAt(0) === "+" || second.charAt(0) === "-";
+for (let i = 0; i < AIM_KEYS.length; i++) {
+const k = AIM_KEYS[i];
+aimApply(k, wrapAngle(relative ? aimAngle(k) + value : value));
+}
+say(playerId, "All " + AIM_KEYS.length + " NPCs now face yaw " + wrapAngle(value) + " degrees.", "#55ff55");
+return false;
+}
+const legacy = Number(first);
+if (!isFinite(legacy)) {
+say(playerId, "Usage: /aim <seno|gambler|fishing|hunting|mining|lumber|all> <degrees>", "#ff5555");
+return false;
+}
+const rel = first.charAt(0) === "+" || first.charAt(0) === "-";
+aimApply("seno", wrapAngle(rel ? prestigeYaw() + legacy : legacy));
+say(playerId, PRESTIGE_NPC_NAME + " now faces yaw " + aimAngle("seno") + " degrees.", "#55ff55");
 return false;
 }
 function prestigeData(playerId) {
@@ -2343,6 +2418,93 @@ PRESTIGE_NPC = eId;
 try { api.setPosition(eId, CFG.PRESTIGE_POS[0], CFG.PRESTIGE_POS[1], CFG.PRESTIGE_POS[2]); } catch (e) { noteError("prestige pos", e); }
 try { api.setEntityRotation(eId, 0, prestigeYaw(), 0); } catch (e) { noteError("prestige yaw", e); }
 applyPrestigeNameTag();
+}
+const GAMBLER_NAME = "Gambler";
+const GAMBLER_POS = [603.5, -99943, -85.5];
+const GAMBLER_YAW_KEY = "vb_gambler_yaw_v1";
+const GAMBLE_MS = 86400000;
+const GAMBLE_RARE = ["Diamond", "Moonstone", "Diamond Ore", "Emerald Ore", "Moonstone Ore"];
+const GAMBLE_COMMON = ["Coal", "Coal Ore", "Iron Ore", "Gold Ore", "Apple", "Bread", "Cooked Porkchop", "Cooked Mutton", "Carrot", "Wheat Seeds", "Maple Log", "Pine Log", "Maple Wood Planks", "Stone Bricks", "Torch", "Pumpkin", "Melon"];
+let GAMBLER_NPC = null;
+let GAMBLER_ANGLE = 90;
+function loadGamblerYaw() {
+let raw = null;
+try { raw = api.getLobbyDbValue(GAMBLER_YAW_KEY); } catch (e) { raw = null; }
+const value = Number(raw);
+GAMBLER_ANGLE = raw !== null && raw !== undefined && raw !== "" && isFinite(value) ? wrapAngle(value) : 90;
+}
+function gamblerYaw() {
+return GAMBLER_ANGLE;
+}
+function applyGamblerYaw() {
+if (!GAMBLER_NPC) return;
+try { api.setEntityRotation(GAMBLER_NPC, 0, gamblerYaw(), 0); } catch (e) { }
+}
+function gamblerLeft(playerId) {
+const d = ensure(playerId);
+const last = d.gamble && isFinite(Number(d.gamble.last)) ? Number(d.gamble.last) : 0;
+if (!last) return 0;
+return Math.max(0, GAMBLE_MS - (Date.now() - last));
+}
+function gambleRoll(playerId) {
+if (!playerId) return false;
+const d = ensure(playerId);
+if (!d.gamble || typeof d.gamble !== "object") d.gamble = { last: 0, rolls: 0, best: "" };
+const left = gamblerLeft(playerId);
+if (left > 0) {
+say(playerId, GAMBLER_NAME + " already paid you out. The dice rest for " + fmtShortTime(left) + " more.", "#ff5555");
+return false;
+}
+const rare = Math.random() < 0.18;
+const pool = rare ? GAMBLE_RARE : GAMBLE_COMMON;
+const item = pool[Math.floor(Math.random() * pool.length)];
+const count = rare ? 1 + Math.floor(Math.random() * 2) : 4 + Math.floor(Math.random() * 15);
+let given = 0;
+try { given = api.giveItem(playerId, item, count) || 0; } catch (e) { given = 0; }
+if (!given) {
+say(playerId, "No room for " + item + " - clear a slot and right-click " + GAMBLER_NAME + " again.", "#ff5555");
+return false;
+}
+d.gamble.last = Date.now();
+d.gamble.rolls = num(d.gamble.rolls) + 1;
+d.gamble.best = item;
+saveNow(playerId);
+sfx(playerId, "exp_levelup", 1, 1);
+say(playerId, "The dice land on " + fmtNum(given) + " " + item + "!", rare ? "#55ff55" : "#ffd75e");
+say(playerId, "Free roll spent - the next one is in 24 hours. Rolls so far: " + fmtNum(d.gamble.rolls) + ".", "#8a8a8a");
+return true;
+}
+function applyGamblerNameTag() {
+if (!GAMBLER_NPC) return;
+try {
+api.setTargetedPlayerSettingForEveryone(GAMBLER_NPC, "nameTagInfo", {
+content: [{ str: "\u2684 " + GAMBLER_NAME.toUpperCase() + " \u2684", style: styleFor("#ffd75e") }],
+subtitle: [{ str: "FREE ROLL EVERY 24 HOURS - RIGHT-CLICK", style: styleFor("#8a8a8a") }],
+border: { colour: colourName("#ffd75e"), style: "glow" },
+}, true);
+return;
+} catch (e) {
+noteError("gambler nametag", e);
+}
+try { api.setTargetedPlayerSettingForEveryone(GAMBLER_NPC, "nameColour", "gold", true); } catch (e) { noteError("gambler colour", e); }
+}
+function setupGamblerNpc() {
+if (GAMBLER_NPC) return;
+let eId = null;
+try {
+eId = api.attemptCreateMeshEntity("Person", { size: 1.1, pose: "standing", textures: { head: "piggy_banker" } }, GAMBLER_NAME + " - right-click for a free roll");
+} catch (e) {
+noteError("gambler npc", e);
+eId = null;
+}
+if (!eId) {
+try { eId = api.attemptCreateMeshEntity("Person", { size: 1.1, pose: "standing" }, GAMBLER_NAME); } catch (e) { noteError("gambler npc plain", e); eId = null; }
+}
+if (!eId) return;
+GAMBLER_NPC = eId;
+try { api.setPosition(eId, GAMBLER_POS[0], GAMBLER_POS[1], GAMBLER_POS[2]); } catch (e) { noteError("gambler pos", e); }
+try { api.setEntityRotation(eId, 0, gamblerYaw(), 0); } catch (e) { noteError("gambler yaw", e); }
+applyGamblerNameTag();
 }
 function setOverallLevel(playerId, level) {
 const d = ensure(playerId);
@@ -4059,7 +4221,7 @@ questStep("Trophy Run", 22, 300, 110, "Twenty two kills and I will start believi
 questStep("Apex Contract", 40, 430, 165, "Forty mobs. Then we go looking for the big one."),
 ],
 endless: { name: "Open Contract", need: 55, step: 20, shards: 560, shardStep: 100, xp: 220, xpStep: 44, line: "Contracts never dry up out here. Keep the blade warm." },
-x: 9991, y: -9999, z: 10009,
+x: 665, y: -99943, z: -60,
 },
 mining: {
 name: "Mining", short: "Mining", title: "Assassin", who: "Conceptual", icon: "fa-solid fa-hammer", colour: "#c9c9c9",
@@ -4071,7 +4233,7 @@ questStep("Vault Breach", 110, 280, 105, "The vault floor is thin. One hundred a
 questStep("No Witnesses", 180, 400, 150, "Leave nothing behind. One hundred and eighty blocks."),
 ],
 endless: { name: "Clean Contract", need: 240, step: 80, shards: 520, shardStep: 95, xp: 200, xpStep: 40, line: "Every wall is a way in. Keep digging." },
-x: 9991, y: -9999, z: 9991,
+x: 648.5, y: -99943, z: -57.5,
 },
 lumber: {
 name: "Lumberjacking", short: "Wood", title: "Lumberjack", who: "PolyDuck", icon: "fa-solid fa-tree", colour: "#c98a4b",
@@ -4083,7 +4245,7 @@ questStep("Clear Cut", 80, 340, 125, "Eighty logs. I count trunks, not stumps.")
 questStep("Old Growth", 130, 470, 175, "One hundred and thirty logs. Then we talk about the good groves."),
 ],
 endless: { name: "Open Grove", need: 180, step: 50, shards: 600, shardStep: 110, xp: 230, xpStep: 46, line: "The forest never runs dry. Back to the grove." },
-x: 10009, y: -9999, z: 9991,
+x: 652, y: -99942, z: -45,
 },
 };
 const QUEST_NPCS = {};
@@ -4143,7 +4305,7 @@ say(playerId, "Prestige " + p.count + "/" + CFG.PRESTIGE_MAX + "  |  cap " + (p.
 const DISCORD_LINK = "https://discord.gg/crWR7Xx6bZ";
 const FANCY_TITLE = true;
 const GAME_TITLE = "AEVORA SMP";
-const FANCY_NAME = "𝔸𝔼𝕍𝕆𝕄𝔸";
+const FANCY_NAME = "𝔸𝔼𝕍𝕆ℝ𝔸";
 function gameTitle() {
 return FANCY_TITLE ? FANCY_NAME + " 𝕊𝕄ℙ" : GAME_TITLE;
 }
@@ -4273,7 +4435,7 @@ noteError("giver " + key + " plain", e);
 return null;
 }
 }
-const GIVER_YAW_KEY = "vb_giver_yaw_v2";
+const GIVER_YAW_KEY = "vb_giver_yaw_v3";
 const GIVER_YAW = {};
 function loadGiverYaw() {
 let raw = null;
@@ -4288,13 +4450,14 @@ GIVER_YAW[key] = isFinite(value) ? value : 0;
 function saveGiverYaw() {
 try { api.setLobbyDbValue(GIVER_YAW_KEY, JSON.stringify(GIVER_YAW)); } catch (e) { }
 }
-const GIVER_BASE_YAW = { fishing: 180, hunting: 60, mining: 315, lumber: 225 };
-function giverYaw(type) {
+const NPC_YARD = [634, -99943, -78];
+const GIVER_BASE_YAW = { fishing: 180 };
+function giverBaseYaw(type) {
 const giver = QUEST_TYPES[type];
-const base = isFinite(GIVER_BASE_YAW[type])
-? GIVER_BASE_YAW[type]
-: yawTo(giver.x, giver.z, QUEST_CENTRE[0], QUEST_CENTRE[2]);
-return (base + (GIVER_YAW[type] || 0) + 360) % 360;
+return isFinite(GIVER_BASE_YAW[type]) ? GIVER_BASE_YAW[type] : Math.round(yawTo(giver.x, giver.z, NPC_YARD[0], NPC_YARD[2]));
+}
+function giverYaw(type) {
+return (giverBaseYaw(type) + (GIVER_YAW[type] || 0) + 360) % 360;
 }
 function applyGiverSkin(type) {
 const eId = QUEST_NPCS[type];
@@ -4319,6 +4482,7 @@ applyGiverYaw(type);
 function healGiverAims() {
 for (const key in QUEST_NPCS) applyGiverYaw(key);
 applyPrestigeYaw();
+applyGamblerYaw();
 }
 function applyGiverYaw(type) {
 const eId = QUEST_NPCS[type];
@@ -4330,10 +4494,11 @@ const ids = [];
 for (const key in QUEST_NPCS) ids.push(key + "=" + QUEST_NPCS[key]);
 say(playerId, "AEVORA DIAG", "#ffcc00");
 say(playerId, "givers " + ids.length + "/4  prestige " + (PRESTIGE_NPC ? "up" : "missing") + "  " + (ids.join("  ") || "none spawned"), "#8a8a8a");
-say(playerId, "prestige yaw " + prestigeYaw() + " (default " + wrapAngle(CFG.PRESTIGE_YAW) + ") - owner /aim <degrees>", "#8a8a8a");
+say(playerId, "prestige yaw " + prestigeYaw() + " at " + CFG.PRESTIGE_POS.join(" ") + " - owner /aim", "#8a8a8a");
+say(playerId, "gambler " + (GAMBLER_NPC ? "up" : "missing") + " yaw " + Math.round(gamblerYaw()) + " at " + GAMBLER_POS.join(" "), "#8a8a8a");
 say(playerId, "side panel " + (PANEL_OFF[playerId] ? "hidden by /panel" : "on"), "#8a8a8a");
 for (const key in QUEST_TYPES) {
-say(playerId, "  " + key + " skin " + giverSkin(key) + " yaw " + Math.round(giverYaw(key)) + " nudge " + (GIVER_YAW[key] || 0), "#8a8a8a");
+say(playerId, "  " + key + " " + giver.x + " " + giver.y + " " + giver.z + " yaw " + Math.round(giverYaw(key)) + " skin " + giverSkin(key), "#8a8a8a");
 }
 if (!LAST_ERRORS.length) {
 say(playerId, "no errors recorded this session", "#55ff55");
@@ -4366,6 +4531,7 @@ applyGiverYaw(key);
 applyGiverNameTag(key);
 }
 setupPrestigeNpc();
+setupGamblerNpc();
 }
 function questSpec(type, done) {
 const giver = QUEST_TYPES[type];
@@ -4710,6 +4876,10 @@ if (PRESTIGE_NPC && targetEId === PRESTIGE_NPC) {
 openPrestigeMenu(playerId);
 return;
 }
+if (GAMBLER_NPC && targetEId === GAMBLER_NPC) {
+gambleRoll(playerId);
+return;
+}
 for (const key in QUEST_NPCS) {
 if (QUEST_NPCS[key] === targetEId) {
 questTalkThrottled(playerId, key);
@@ -4773,7 +4943,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-AEVORA-1";
+const BUILD = "VB-AEVORA-2";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
@@ -4833,6 +5003,10 @@ return false;
 }
 if (cmd === "aim" || cmd === "seno" || cmd === "bloxdseno") {
 cmdAim(playerId, args);
+return false;
+}
+if (cmd === "gamble" || cmd === "roll" || cmd === "gambler") {
+gambleRoll(playerId);
 return false;
 }
 if (cmd === "meteortp" || cmd === "meteorteleport" || cmd === "mtp") {
@@ -5011,6 +5185,7 @@ noteError("giver skins", e);
 }
 try {
 loadPrestigeYaw();
+loadGamblerYaw();
 } catch (e) {
 noteError("prestige yaw", e);
 }
