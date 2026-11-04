@@ -15,6 +15,7 @@ BOARD_EVERY_MS: 4000,
 PORTAL_CHECK_MS: 400,
 PORTAL_COOLDOWN_MS: 4000,
 BLACK_PORTAL_DEST: [50000.5, 60001, 49999.5],
+ORANGE_PORTAL_DEST: [637, -99932, -396],
 ARENA_DEST: [9063.5, 9991, 9744.5],
 ARENA_GRACE_MS: 5000,
 ZONE_HALF: 50,
@@ -1881,6 +1882,7 @@ say(playerId, "  /tutorial - replay the starter walkthrough", "#ffffff");
 if (isOwner(playerId)) say(playerId, "  /meteor spawn - drop a meteor now", "#ffffff");
 say(playerId, "The world border sits " + fmtNum(CFG.WORLD_BORDER) + " blocks out on each side.", "#8a8a8a");
 say(playerId, "  Light blue portal - PVP arena with a 5s grace period", "#ffffff");
+say(playerId, "  Orange portal - warps you to 637, -99932, -396", "#ffffff");
 say(playerId, "Only the owner can break blocks within 100x100 of the arena or the black portal.", "#8a8a8a");
 say(playerId, "No hitting in the lobby or at the black portal.", "#8a8a8a");
 say(playerId, "QUESTS", "#55aaff");
@@ -3200,6 +3202,28 @@ sfx(playerId, "zapAccent2", 0.9, 1.15);
 say(playerId, "PVP ARENA - " + Math.round(CFG.ARENA_GRACE_MS / 1000) + "s grace, nothing can hit you.", "#55aaff");
 return true;
 }
+function isOrangePortal(name) {
+const text = String(name || "").toLowerCase().replace(/[^a-z]/g, "");
+if (text.indexOf("portal") === -1) return false;
+return text.indexOf("orange") !== -1;
+}
+function orangePortalPlayer(playerId, now) {
+const dest = CFG.ORANGE_PORTAL_DEST;
+try {
+api.setPosition(playerId, dest[0], dest[1], dest[2]);
+} catch (e) {
+noteError("orange portal", e);
+say(playerId, "The orange portal fizzles.", "#ff5555");
+return false;
+}
+const rt = RT[playerId] || (RT[playerId] = {});
+rt.portalUntil = (now || Date.now()) + CFG.PORTAL_COOLDOWN_MS;
+rt.portalCell = null;
+rt.portalSeen = false;
+sfx(playerId, "zapAccent2", 0.9, 1.35);
+say(playerId, "The orange portal warps you to " + dest[0] + ", " + dest[1] + ", " + dest[2] + ".", "#ff9933");
+return true;
+}
 function blackPortalPlayer(playerId, now) {
 const dest = CFG.BLACK_PORTAL_DEST;
 try {
@@ -3230,6 +3254,7 @@ const hit = portalAtPlayer(id);
 if (!hit) continue;
 if (isBlackPortal(hit)) blackPortalPlayer(id, stamp);
 else if (isLightBluePortal(hit)) arenaPortalPlayer(id, stamp);
+else if (isOrangePortal(hit)) orangePortalPlayer(id, stamp);
 else rtpPlayer(id, stamp);
 }
 }
@@ -3254,6 +3279,10 @@ say(playerId, "  nearby portal: " + (near || "none"), near ? "#55ff55" : "#8a8a8
 if (isBlackPortal(near)) {
 const dest = CFG.BLACK_PORTAL_DEST;
 say(playerId, "  black portal -> " + dest[0] + ", " + dest[1] + ", " + dest[2], "#55ff55");
+}
+if (isOrangePortal(near)) {
+const dest = CFG.ORANGE_PORTAL_DEST;
+say(playerId, "  orange portal -> " + dest[0] + ", " + dest[1] + ", " + dest[2], "#ff9933");
 }
 if (isLightBluePortal(near)) {
 const dest = CFG.ARENA_DEST;
@@ -4943,7 +4972,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-AEVORA-3";
+const BUILD = "VB-AEVORA-4";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
