@@ -1461,7 +1461,7 @@ function updateSanity(id, dtSeconds) {
 	// breakdown
 	if (st.sanity <= 2 && NOW > st.frightAt + 20000) {
 		st.frightAt = NOW;
-		safe(() => api.applyEffect(id, "Blindness", 5000));
+		safe(() => api.applyEffect(id, "Blindness", 5000, { inbuiltLevel: 1 }));
 		safe(() => api.shakePlayerCamera(id, 0.9, 1600));
 		sound(SND.fright, id, 0.9, 0.9);
 	}
@@ -1817,7 +1817,7 @@ function tagAbduction(id) {
 	const hp = safe(() => api.getHealth(id));
 	if (typeof hp === "number" && hp > 4) safe(() => api.setHealth(id, Math.max(4, Math.round(hp * 0.4))));
 	// applyEffect durations are milliseconds, not seconds
-	safe(() => api.applyEffect(id, "Blindness", 5000));
+	safe(() => api.applyEffect(id, "Blindness", 5000, { inbuiltLevel: 1 }));
 	safe(() => api.applyEffect(id, "Slowness", 4000, { inbuiltLevel: 1 }));
 	st.sanity = clamp(st.sanity - 16, 0, CFG.SANITY_MAX);
 	speak(id, "unknown", "You wake up somewhere else.", { dialogue: false });
@@ -2988,15 +2988,20 @@ function sayMeshResult(playerId, label, group, expected) {
 }
 
 function testEffect(playerId, name) {
-	safe(() => api.applyEffect(playerId, name, 4000));
-	const has =
-		typeof api.hasEffect === "function" ? safe(() => api.hasEffect(playerId, name, 1)) : null;
-	const list = safe(() => api.getEffects(playerId));
-	const listed = Array.isArray(list) && list.indexOf(name) !== -1;
-	if (has === true || listed) say(playerId, "OK   effect " + name, "#55ff55");
-	else if (has === false && Array.isArray(list)) say(playerId, "FAIL effect " + name, "#ff5555");
-	else say(playerId, "SENT effect " + name, "#c9c9c9");
-	later(2500, () => safe(() => api.removeEffect(playerId, name)));
+	safe(() => api.applyEffect(playerId, name, 4000, { inbuiltLevel: 1 }));
+	// Effects can register on the next server tick, so verify shortly after applying.
+	later(300, () => {
+		const has =
+			typeof api.hasEffect === "function" ? safe(() => api.hasEffect(playerId, name, 1)) : null;
+		const list = safe(() => api.getEffects(playerId));
+		const listed = Array.isArray(list) && list.indexOf(name) !== -1;
+		if (has === true || listed) say(playerId, "OK   effect " + name, "#55ff55");
+		else if (has === false || Array.isArray(list)) {
+			const active = Array.isArray(list) ? list.join(", ") || "none" : "unknown";
+			say(playerId, "FAIL effect " + name + " (active: " + active + ")", "#ff5555");
+		} else say(playerId, "SENT effect " + name, "#c9c9c9");
+		later(2600, () => safe(() => api.removeEffect(playerId, name)));
+	});
 }
 
 function runTest(playerId) {
@@ -3015,7 +3020,7 @@ function runTest(playerId) {
 	testing = true;
 	clearHorrorMobs();
 	clearMeshes();
-	say(playerId, "TEST \u2014 cleared mobs and models. Spawning everything now.", "#8fd0ff");
+	say(playerId, "TEST build 4 \u2014 cleared mobs and models. Spawning everything now.", "#8fd0ff");
 
 	let mobOk = 0;
 	for (let i = 0; i < TEST_MOBS.length; i++) {
