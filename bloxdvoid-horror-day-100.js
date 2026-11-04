@@ -1461,7 +1461,7 @@ function updateSanity(id, dtSeconds) {
 	// breakdown
 	if (st.sanity <= 2 && NOW > st.frightAt + 20000) {
 		st.frightAt = NOW;
-		safe(() => api.applyEffect(id, "Blindness", 5));
+		safe(() => api.applyEffect(id, "Blindness", 5000));
 		safe(() => api.shakePlayerCamera(id, 0.9, 1600));
 		sound(SND.fright, id, 0.9, 0.9);
 	}
@@ -1816,8 +1816,9 @@ function tagAbduction(id) {
 	safe(() => api.setPosition(id, spot[0] + 0.5, spot[1] + 1, spot[2] + 0.5));
 	const hp = safe(() => api.getHealth(id));
 	if (typeof hp === "number" && hp > 4) safe(() => api.setHealth(id, Math.max(4, Math.round(hp * 0.4))));
-	safe(() => api.applyEffect(id, "Blindness", 4));
-	safe(() => api.applyEffect(id, "Slowness", 3, { inbuiltLevel: 1 }));
+	// applyEffect durations are milliseconds, not seconds
+	safe(() => api.applyEffect(id, "Blindness", 5000));
+	safe(() => api.applyEffect(id, "Slowness", 4000, { inbuiltLevel: 1 }));
 	st.sanity = clamp(st.sanity - 16, 0, CFG.SANITY_MAX);
 	speak(id, "unknown", "You wake up somewhere else.", { dialogue: false });
 }
@@ -1926,7 +1927,7 @@ function tagQuake(id) {
 	safe(() => api.shakePlayerCamera(id, 0.95, 2600));
 	sound(SND.impact, id, 0.9, 0.7);
 	later(400, () => sound(SND.thunder, id, 0.7, 0.8));
-	safe(() => api.applyEffect(id, "Slowness", 2, { inbuiltLevel: 1 }));
+	safe(() => api.applyEffect(id, "Slowness", 2500, { inbuiltLevel: 1 }));
 	safe(() => api.queueMiddleTextLower(id, "The ground is moving.", 2600));
 }
 
@@ -2987,12 +2988,15 @@ function sayMeshResult(playerId, label, group, expected) {
 }
 
 function testEffect(playerId, name) {
-	safe(() => api.applyEffect(playerId, name, 3000));
-	const has = typeof api.hasEffect === "function" ? safe(() => api.hasEffect(playerId, name)) : null;
-	if (has === true) say(playerId, "OK   effect " + name, "#55ff55");
-	else if (has === false) say(playerId, "FAIL effect " + name, "#ff5555");
+	safe(() => api.applyEffect(playerId, name, 4000));
+	const has =
+		typeof api.hasEffect === "function" ? safe(() => api.hasEffect(playerId, name, 1)) : null;
+	const list = safe(() => api.getEffects(playerId));
+	const listed = Array.isArray(list) && list.indexOf(name) !== -1;
+	if (has === true || listed) say(playerId, "OK   effect " + name, "#55ff55");
+	else if (has === false && Array.isArray(list)) say(playerId, "FAIL effect " + name, "#ff5555");
 	else say(playerId, "SENT effect " + name, "#c9c9c9");
-	later(2000, () => safe(() => api.removeEffect(playerId, name)));
+	later(2500, () => safe(() => api.removeEffect(playerId, name)));
 }
 
 function runTest(playerId) {
