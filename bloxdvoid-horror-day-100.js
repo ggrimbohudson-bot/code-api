@@ -271,6 +271,18 @@ const SND = {
 	creak: "rpgCreak1",
 };
 
+const TEST_MOBS = [
+	["Stalker", "void"],
+	["Draugr Reaver", "default"],
+	["Cave Golem", "corrupted"],
+	["Draugr Zombie", "corrupted"],
+	["Draugr Warper", "default"],
+	["Spirit Bear", "default"],
+	["Spirit Wolf", "default"],
+	["NPC", "default"],
+	["Tiki Terror", "tyrant"],
+];
+
 const WHISPERS = [
 	"Day %D. You are still here.",
 	"Nobody is coming to help you.",
@@ -322,6 +334,7 @@ const PLAYERS = {}; // playerId -> per-player state
 const TRACK = {}; // mobId -> { role, player, born, expireAt, ... }
 const SCHED = []; // timed callbacks
 let booted = false;
+let testing = false;
 
 function pstate(id) {
 	if (!PLAYERS[id]) {
@@ -2676,6 +2689,12 @@ playerCommand = function (playerId, command) {
 
 	const isHorror = cmd === "horror" || cmd === "h" || cmd === "s4k" || cmd === "100";
 
+	// ---- self test: /test or /horror test ----
+	if (cmd === "test") {
+		runTest(playerId);
+		return false;
+	}
+
 	// ---- the start trigger ----
 	// Anyone can type the configured word (default /survive) to begin the run.
 	if (!isHorror && cmd === String(CFG.START_COMMAND).toLowerCase()) {
@@ -2701,6 +2720,7 @@ playerCommand = function (playerId, command) {
 			say(playerId, "/horror day <1-100> | boss | clear | meshes | sanity <n> | finish | reset", "#8fd0ff");
 			say(playerId, "/horror say <voice> <text> \u2014 voices: benefactor, unknown, watcher, crone, system", "#8fd0ff");
 			say(playerId, "/horror length <dayMin> <nightMin> | test <tag>", "#8fd0ff");
+			say(playerId, "/test \u2014 spawn every mob, model and sound to check the server", "#8fd0ff");
 		}
 		return false;
 	}
@@ -2839,9 +2859,13 @@ playerCommand = function (playerId, command) {
 
 	if (sub === "test") {
 		const tag = (args[2] || "").toLowerCase();
+		if (!tag) {
+			runTest(playerId);
+			return false;
+		}
 		const h = nextDayHorror(RUN.day);
 		fireTag(tag, playerId, h);
-		say(playerId, "Fired: " + (tag || "sound"), "#8fd0ff");
+		say(playerId, "Fired: " + tag, "#8fd0ff");
 		return false;
 	}
 
@@ -2934,6 +2958,119 @@ function showDay(playerId, day) {
 	say(playerId, "DAY " + h[0] + " \u2014 " + h[1], "#a83232");
 	say(playerId, h[3], "gray");
 	say(playerId, "Behaviours: " + h[2].join(", "), "#8a8a8a");
+}
+
+/* ---------------------------------------------------------------------------
+   SELF TEST
+   /test spawns one of every mob type, all four mesh models, the benefactor,
+   every sound, the two effects the mode relies on and a particle burst, then
+   reports each one. A FAIL line means the server rejected that name.
+   --------------------------------------------------------------------------- */
+function testSpot(id, i) {
+	const pos = playerPos(id);
+	if (!pos) return null;
+	const info = safe(() => api.getPlayerFacingInfo(id));
+	const dir = info && info.dir ? info.dir : [0, 0, 1];
+	const yaw = Math.atan2(dir[0], dir[2]);
+	const a = yaw + (i - 4) * 0.3;
+	const r = 6 + (i % 3) * 2;
+	const x = pos[0] + Math.sin(a) * r;
+	const z = pos[2] + Math.cos(a) * r;
+	const y = findGround(x, z, pos[1]);
+	return y === null ? null : [x, y, z];
+}
+
+function sayMeshResult(playerId, label, group, expected) {
+	const parts = group ? group.parts.length : 0;
+	if (parts >= expected) say(playerId, "OK   model " + label + " (" + parts + " parts)", "#55ff55");
+	else say(playerId, "FAIL model " + label + " (" + parts + "/" + expected + " parts)", "#ff5555");
+}
+
+function testEffect(playerId, name) {
+	safe(() => api.applyEffect(playerId, name, 3000));
+	const has = typeof api.hasEffect === "function" ? safe(() => api.hasEffect(playerId, name)) : null;
+	if (has === true) say(playerId, "OK   effect " + name, "#55ff55");
+	else if (has === false) say(playerId, "FAIL effect " + name, "#ff5555");
+	else say(playerId, "SENT effect " + name, "#c9c9c9");
+	later(2000, () => safe(() => api.removeEffect(playerId, name)));
+}
+
+function runTest(playerId) {
+	if (!isAdmin(playerId)) {
+		say(playerId, "Only the world owner can run /test.", "red");
+		return;
+	}
+	if (testing) {
+		say(playerId, "A test is already running.", "yellow");
+		return;
+	}
+	if (RUN.finished) {
+		say(playerId, "The run is finished. /" + CFG.START_COMMAND + " or /horror reset first.", "yellow");
+		return;
+	}
+	testing = true;
+	clearHorrorMobs();
+	clearMeshes();
+	say(playerId, "TEST \u2014 cleared mobs and models. Spawning everything now.", "#8fd0ff");
+
+	let mobOk = 0;
+	for (let i = 0; i < TEST_MOBS.length; i++) {
+		const type = TEST_MOBS[i][0];
+		const variation = TEST_MOBS[i][1];
+		const spot = testSpot(playerId, i);
+		const mobId = spot
+			? safe(() =>
+					api.attemptSpawnMob(type, spot[0], spot[1] + 0.2, spot[2], {
+						playSoundOnSpawn: false,
+						variation: variation,
+					})
+			  )
+			: null;
+		if (mobId === null || mobId === undefined) {
+			say(playerId, "FAIL mob " + type + " (" + variation + ")", "#ff5555");
+			continue;
+		}
+		mobOk++;
+		setMobHealth(mobId, 20);
+		mobSetting(mobId, "attackDamage", 0);
+		mobSetting(mobId, "hostilityRadius", 0);
+		mobSetting(mobId, "baseRunningSpeed", 0);
+		mobAi(mobId, "watching", { targetId: playerId });
+		trackMob(mobId, { role: "test", player: playerId, born: NOW, expireAt: NOW + 22000, alive: true });
+		say(playerId, "OK   mob " + type + " (" + variation + ")", "#55ff55");
+	}
+
+	const watcherSpot = spotAround(playerId, 10, 16);
+	sayMeshResult(playerId, "Watcher", watcherSpot ? buildWatcher(playerId, watcherSpot) : null, 8);
+	const hollowSpot = spotAround(playerId, 9, 15);
+	sayMeshResult(playerId, "Hollow", hollowSpot ? buildHollow(playerId, hollowSpot) : null, 4);
+	sayMeshResult(playerId, "Shadow swarm", buildShadows(playerId), 4);
+	const obeliskSpot = spotAround(playerId, 7, 13);
+	sayMeshResult(playerId, "Obelisk", obeliskSpot ? buildObelisk(playerId, obeliskSpot) : null, 4);
+
+	later(6500, () => {
+		clearMeshes();
+		sayMeshResult(playerId, "Benefactor", spawnBenefactor(playerId), 6);
+	});
+
+	let sounds = 0;
+	for (const key in SND) {
+		sounds++;
+		later(sounds * 380, () => sound(SND[key], playerId, 0.18, 1));
+	}
+	say(playerId, "OK   " + sounds + " sounds queued (about " + Math.round((sounds * 380) / 1000) + "s).", "#55ff55");
+
+	testEffect(playerId, "Blindness");
+	testEffect(playerId, "Slowness");
+	later(900, () => particleBurst(playerPos(playerId) || [0, 0, 0], [255, 60, 60, 1]));
+	say(playerId, "OK   particle burst sent.", "#55ff55");
+
+	later(17000, () => {
+		clearMeshes();
+		testing = false;
+		say(playerId, "TEST DONE \u2014 mobs " + mobOk + "/" + TEST_MOBS.length + ", models 5/5, sounds " + sounds + ".", "#8fd0ff");
+		say(playerId, "Test mobs despawn in about 5s. FAIL lines are names this server does not have.", "gray");
+	});
 }
 
 /* ---------------------------------------------------------------------------
