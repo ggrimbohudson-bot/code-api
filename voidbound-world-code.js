@@ -79,6 +79,7 @@ MAX_TEMP_BAN_DAYS: 30,
 WARNS_MAX: 120,
 };
 const OWNER_NAMES = ["xvexx", "polyduck"];
+const RETIRED_NAMES = ["itzkasaixyt"];
 const RANKS = {
 owner: { key: "owner", name: "Founder", tag: "FOUNDER", colour: "#ffcc00", icon: "fa-solid fa-crown", nameColour: "yellow", level: 4 },
 admin: { key: "admin", name: "Admin", tag: "ADMIN", colour: "#ff5555", icon: "fa-solid fa-shield-halved", nameColour: "red", level: 3 },
@@ -1268,6 +1269,7 @@ const data = typeof raw === "string" ? JSON.parse(raw) : raw;
 if (!data || typeof data !== "object") return;
 if (data.ranks && typeof data.ranks === "object") {
 for (const key in data.ranks) {
+if (isRetiredName(key)) continue;
 const rec = data.ranks[key];
 if (!rec || !RANKS[rec.r]) continue;
 STAFF.ranks[String(key).toLowerCase()] = {
@@ -1441,9 +1443,13 @@ try { return api.getEntityName(playerId) || String(playerId); } catch (e) { retu
 function keyOf(input) {
 return String(input || "").trim().toLowerCase();
 }
+function isRetiredName(input) {
+return RETIRED_NAMES.indexOf(keyOf(input)) !== -1;
+}
 function rankInfoForName(input) {
 const key = keyOf(input);
 if (!key) return RANKS.player;
+if (RETIRED_NAMES.indexOf(key) !== -1) return RANKS.player;
 if (OWNER_NAMES.indexOf(key) !== -1) return RANKS.owner;
 const online = findPlayer(key);
 if (online) {
@@ -3641,6 +3647,10 @@ say(playerId, "Usage: /rank <player> <trial|mod|admin|founder|player>", "#ff5555
 return;
 }
 const key = keyOf(name);
+if (RETIRED_NAMES.indexOf(key) !== -1 && want !== "player") {
+say(playerId, "That name is retired and cannot be given staff rank.", "#ff5555");
+return;
+}
 if (OWNER_NAMES.indexOf(key) !== -1 && want !== "owner") {
 say(playerId, "That player is a permanent Founder and cannot be demoted.", "#ff5555");
 return;
@@ -4976,7 +4986,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-AEVORA-5";
+const BUILD = "VB-AEVORA-6";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
