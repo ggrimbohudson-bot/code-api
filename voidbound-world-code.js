@@ -2149,11 +2149,16 @@ if (!PRESTIGE_NPC) return;
 try { api.setEntityRotation(PRESTIGE_NPC, 0, prestigeYaw(), 0); } catch (e) { }
 }
 const AIM_KEYS = ["seno", "gambler", "fishing", "hunting", "mining", "lumber"];
+const AIM_ALIASES = {
+seno: "seno", bloxdseno: "seno", prestige: "seno",
+gambler: "gambler", gamble: "gambler", roll: "gambler", dice: "gambler",
+fishing: "fishing", fisher: "fishing", angler: "fishing", fish: "fishing",
+hunting: "hunting", hunter: "hunting", hunt: "hunting", monster: "hunting",
+mining: "mining", miner: "mining", mine: "mining", assassin: "mining",
+lumber: "lumber", lumberjack: "lumber", wood: "lumber", chopper: "lumber",
+};
 function aimKey(raw) {
-const k = String(raw || "").toLowerCase();
-if (k === "seno" || k === "bloxdseno" || k === "prestige") return "seno";
-if (k === "gambler" || k === "gamble" || k === "roll") return "gambler";
-return QUEST_TYPES[k] ? k : null;
+return AIM_ALIASES[keyOf(raw)] || null;
 }
 function aimWho(key) {
 if (key === "seno") return PRESTIGE_NPC_NAME;
@@ -2230,7 +2235,7 @@ return false;
 }
 const legacy = Number(first);
 if (!isFinite(legacy)) {
-say(playerId, "Usage: /aim <seno|gambler|fishing|hunting|mining|lumber|all> <degrees>", "#ff5555");
+say(playerId, "Usage: /aim <seno|gambler|fishing|hunting|mining|lumber|all> <degrees> - names like angler, miner or lumberjack work too.", "#ff5555");
 return false;
 }
 const rel = first.charAt(0) === "+" || first.charAt(0) === "-";
@@ -4304,7 +4309,7 @@ questStep("Deep Current", 12, 250, 95, "The fat ones hide in the deep current. B
 questStep("Void Marlin", 20, 360, 140, "Twenty fish and the Void Marlin will finally look at your hook."),
 ],
 endless: { name: "Endless Tide", need: 28, step: 12, shards: 500, shardStep: 90, xp: 190, xpStep: 38, line: "The tide never stops and neither do you. Back to work." },
-x: 10009, y: -9999, z: 10009,
+x: 698.5, y: -99943, z: -95.5,
 },
 hunting: {
 name: "Monster Hunting", short: "Hunting", title: "Monster Hunter", who: "TECMAN_", icon: "fa-solid fa-skull", colour: "#ff9a9a",
@@ -4530,7 +4535,7 @@ noteError("giver " + key + " plain", e);
 return null;
 }
 }
-const GIVER_YAW_KEY = "vb_giver_yaw_v3";
+const GIVER_YAW_KEY = "vb_giver_yaw_v4";
 const GIVER_YAW = {};
 function loadGiverYaw() {
 let raw = null;
@@ -4546,7 +4551,7 @@ function saveGiverYaw() {
 try { api.setLobbyDbValue(GIVER_YAW_KEY, JSON.stringify(GIVER_YAW)); } catch (e) { }
 }
 const NPC_YARD = [634, -99943, -78];
-const GIVER_BASE_YAW = { fishing: 180 };
+const GIVER_BASE_YAW = {};
 function giverBaseYaw(type) {
 const giver = QUEST_TYPES[type];
 return isFinite(GIVER_BASE_YAW[type]) ? GIVER_BASE_YAW[type] : Math.round(yawTo(giver.x, giver.z, NPC_YARD[0], NPC_YARD[2]));
@@ -5042,7 +5047,7 @@ try { api.playSound(id, "levelup", 1, 1); } catch (e) { }
 }
 }
 }
-const BUILD = "VB-AEVORA-8";
+const BUILD = "VB-AEVORA-9";
 playerCommand = function (playerId, command) {
 ensure(playerId);
 const text = String(command || "").trim().replace(/^[/!]+/, "");
